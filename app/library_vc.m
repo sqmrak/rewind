@@ -5,8 +5,11 @@
 #import "tunetube_config.h"
 #import "tunetube_image_cache.h"
 #import "tunetube_theme.h"
+#import "tunetube_l10n.h"
 #import "ytm_api.h"
 #import "ytm_player.h"
+#import "artist_vc.h"
+#import "playlist_vc.h"
 
 static NSDictionary *TuneTubeDictionaryForTrack(YTMTrack *track) {
     if (!track.videoID.length) return nil;
@@ -128,7 +131,11 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     UILabel *_titleLabel;
     UILabel *_artistLabel;
     NSString *_imageURL;
+    YTMTrack *_track;
+    id<TuneArtistTrackCellDelegate> _artistDelegate;
+    UIButton *_artistButton;
 }
+- (void)setArtistDelegate:(id<TuneArtistTrackCellDelegate>)delegate;
 - (void)configureWithTrack:(YTMTrack *)track;
 @end
 
@@ -183,6 +190,13 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     _artistLabel.font = [UIFont systemFontOfSize:13.0f];
     _artistLabel.lineBreakMode = UILineBreakModeTailTruncation;
     [_card addSubview:_artistLabel];
+
+    _artistButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
+    _artistButton.adjustsImageWhenHighlighted = NO;
+    _artistButton.accessibilityLabel = TuneL(@"artist_profile");
+    [_artistButton addTarget:self action:@selector(artistPressed:)
+            forControlEvents:UIControlEventTouchUpInside];
+    [_card addSubview:_artistButton];
     [self applyTheme];
     return self;
 }
@@ -194,6 +208,8 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     [_titleLabel release];
     [_artistLabel release];
     [_imageURL release];
+    [_track release];
+    [_artistButton release];
     [super dealloc];
 }
 
@@ -201,21 +217,31 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     [super prepareForReuse];
     [_imageURL release];
     _imageURL = nil;
+    [_track release];
+    _track = nil;
     _artwork.image = [UIImage imageNamed:@"Icon.png"];
     _titleLabel.text = nil;
     _artistLabel.text = nil;
 }
 
+- (void)setArtistDelegate:(id<TuneArtistTrackCellDelegate>)delegate {
+    _artistDelegate = delegate;
+}
+
 - (void)configureWithTrack:(YTMTrack *)track {
     [self applyTheme];
+    [_track release];
+    _track = [track retain];
     [_imageURL release];
     _imageURL = [TuneTubeLibraryThumbnailURL(track) copy];
     _artwork.image = [UIImage imageNamed:@"Icon.png"];
     _titleLabel.text = track.title;
-    _artistLabel.text = YTMDisplayArtist(track.artist);
+    NSString *artistName = YTMDisplayArtist(track.artist);
+    if ([artistName caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame)
+        artistName = TuneL(@"unknown_artist");
+    _artistLabel.text = artistName;
     if (track.album.length)
-        _artistLabel.text = [NSString stringWithFormat:@"%@  ·  %@",
-                             YTMDisplayArtist(track.artist), track.album];
+        _artistLabel.text = [NSString stringWithFormat:@"%@  ·  %@", artistName, track.album];
     if (!_imageURL.length) return;
 
     NSString *requestedURL = [_imageURL copy];
@@ -224,6 +250,12 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
             _artwork.image = image;
         [requestedURL release];
     });
+}
+
+- (void)artistPressed:(UIButton *)button {
+    (void)button;
+    if (_artistDelegate && [_artistDelegate respondsToSelector:@selector(tuneArtistCell:didSelectTrack:)])
+        [_artistDelegate tuneArtistCell:self didSelectTrack:_track];
 }
 
 - (void)layoutSubviews {
@@ -240,15 +272,18 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     CGFloat right = _card.bounds.size.width - 30.0f;
     _titleLabel.frame = CGRectMake(textX, textY, MAX(20.0f, right - textX), 22.0f);
     _artistLabel.frame = CGRectMake(textX, textY + 24.0f, MAX(20.0f, right - textX), 19.0f);
+    _artistButton.frame = _artistLabel.frame;
 }
 
 @end
 
-@interface TuneLibraryVC ()
+@interface TuneLibraryVC () <TuneArtistTrackCellDelegate>
 - (void)donePressed;
+- (void)playlistsPressed;
 - (void)reloadLibrary;
 - (void)applyTheme:(NSNotification *)note;
 - (void)findMusicPressed;
+- (void)tuneArtistCell:(id)cell didSelectTrack:(YTMTrack *)track;
 @end
 
 @implementation TuneLibraryVC
@@ -282,16 +317,38 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     self.view = view;
 }
 
+- (void)reloadLocalizedChrome {
+    self.title = TuneL(@"library");
+    self.navigationItem.leftBarButtonItem =
+        TuneTubeBarButtonItem(TuneL(@"done"), self, @selector(donePressed));
+    self.navigationItem.rightBarButtonItem =
+        TuneTubeBarButtonItem(TuneL(@"playlists"), self, @selector(playlistsPressed));
+    _emptyLabel.text = TuneL(@"nothing_here");
+    _emptyDescription.text = TuneL(@"library_empty_desc");
+    [_findButton setTitle:TuneL(@"find_music") forState:UIControlStateNormal];
+    [_table reloadData];
+}
+
+- (void)languageChanged:(NSNotification *)note {
+    (void)note;
+    [self reloadLocalizedChrome];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Library";
+    self.title = TuneL(@"library");
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applyTheme:)
                                                  name:TuneTubeThemeDidChangeNotification
                                                object:nil];
-    self.navigationItem.leftBarButtonItem = [[[UIBarButtonItem alloc]
-                                               initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-                                               target:self action:@selector(donePressed)] autorelease];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(languageChanged:)
+                                                 name:TUNETUBE_LANGUAGE_DID_CHANGE_NOTIFICATION
+                                               object:nil];
+    self.navigationItem.leftBarButtonItem =
+        TuneTubeBarButtonItem(TuneL(@"done"), self, @selector(donePressed));
+    self.navigationItem.rightBarButtonItem =
+        TuneTubeBarButtonItem(TuneL(@"playlists"), self, @selector(playlistsPressed));
 
     _backgroundGradient = [[CAGradientLayer layer] retain];
     [self.view.layer insertSublayer:_backgroundGradient atIndex:0];
@@ -311,7 +368,7 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     _emptyLabel.textColor = TuneThemePrimaryText();
     _emptyLabel.font = [UIFont boldSystemFontOfSize:18.0f];
     _emptyLabel.textAlignment = NSTextAlignmentCenter;
-    _emptyLabel.text = @"Nothing here";
+    _emptyLabel.text = TuneL(@"nothing_here");
     [self.view addSubview:_emptyLabel];
 
     _emptyIcon = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"player-star-off.png"]];
@@ -325,11 +382,11 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     _emptyDescription.font = [UIFont systemFontOfSize:13.0f];
     _emptyDescription.numberOfLines = 0;
     _emptyDescription.textAlignment = NSTextAlignmentCenter;
-    _emptyDescription.text = @"Saved tracks will appear here.\nFind music and tap ♥ to add it.";
+    _emptyDescription.text = TuneL(@"library_empty_desc");
     [self.view addSubview:_emptyDescription];
 
     _findButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
-    [_findButton setTitle:@"Find music" forState:UIControlStateNormal];
+    [_findButton setTitle:TuneL(@"find_music") forState:UIControlStateNormal];
     _findButton.titleLabel.font = [UIFont boldSystemFontOfSize:14.0f];
     _findButton.layer.cornerRadius = 10.0f;
     _findButton.layer.borderWidth = 1.0f;
@@ -382,14 +439,19 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     _emptyLabel.textColor = TuneThemePrimaryText();
     _emptyDescription.textColor = TuneThemeSecondaryText();
     _findButton.backgroundColor = TuneThemeAccent();
-    [_findButton setTitleColor:TuneTubeThemeIsLight() ? [UIColor whiteColor] : [UIColor whiteColor]
-                      forState:UIControlStateNormal];
+    [_findButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     _findButton.layer.borderColor = TuneThemeBorder().CGColor;
     [_table reloadData];
 }
 
 - (void)donePressed {
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)playlistsPressed {
+    TunePlaylistsVC *playlists = [[[TunePlaylistsVC alloc]
+                                   initWithPlayer:_player api:_api] autorelease];
+    [self.navigationController pushViewController:playlists animated:YES];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -405,9 +467,15 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
         cell = [[[TuneLibraryCell alloc] initWithStyle:UITableViewCellStyleDefault
                                       reuseIdentifier:cellID] autorelease];
     YTMTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
+    [cell setArtistDelegate:self];
     [cell configureWithTrack:track];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     return cell;
+}
+
+- (void)tuneArtistCell:(id)cell didSelectTrack:(YTMTrack *)track {
+    (void)cell;
+    TunePushArtistProfile(self, track, _api, _player);
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
