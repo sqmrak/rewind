@@ -3,15 +3,20 @@
 #import <QuartzCore/QuartzCore.h>
 #import "tunetube_config.h"
 #import "tunetube_theme.h"
+#import "tunetube_l10n.h"
 
 @interface TuneAboutVC ()
 - (void)githubPressed;
+- (void)backPressed;
 - (void)applyTheme:(NSNotification *)note;
+- (void)languageChanged:(NSNotification *)note;
+- (void)reloadLocalizedUI;
 @end
 
 @implementation TuneAboutVC
 
 - (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
     [_scroll release];
     [_card release];
     [_info release];
@@ -31,13 +36,24 @@
     self.view = view;
 }
 
+- (void)reloadLocalizedUI {
+    self.title = TuneL(@"about");
+    self.navigationItem.leftBarButtonItem =
+        TuneTubeBarButtonItem(TuneL(@"settings"), self, @selector(backPressed));
+    _bodyLabel.text = TuneL(@"about_body");
+    [self layoutAbout];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"About";
     TuneTubeStyleNavigationBar(self.navigationController.navigationBar);
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applyTheme:)
                                                  name:TuneTubeThemeDidChangeNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(languageChanged:)
+                                                 name:TUNETUBE_LANGUAGE_DID_CHANGE_NOTIFICATION
                                                object:nil];
 
     _scroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
@@ -78,7 +94,8 @@
 
     _githubButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
     [_githubButton setTitle:@"github.com/sqmrak" forState:UIControlStateNormal];
-    [_githubButton setTitleColor:TuneThemeAccent() forState:UIControlStateNormal];
+    [_githubButton setTitleColor:[UIColor colorWithRed:0.98f green:0.72f blue:0.74f alpha:1.0f]
+                        forState:UIControlStateNormal];
     _githubButton.titleLabel.font = [UIFont systemFontOfSize:14.0f];
     _githubButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     [_githubButton addTarget:self action:@selector(githubPressed)
@@ -101,14 +118,9 @@
     _bodyLabel.font = [UIFont systemFontOfSize:14.0f];
     _bodyLabel.numberOfLines = 0;
     _bodyLabel.lineBreakMode = UILineBreakModeWordWrap;
-    _bodyLabel.text = [NSString stringWithFormat:
-                       @"YouTube Music client for iOS 5-10\n\n"
-                        "TuneTube searches YouTube Music and plays audio anonymously. "
-                        "No Google password, cookies, or sign-in flow are required.\n\n"
-                       "Built for armv7 and arm64."];
     [_info addSubview:_bodyLabel];
 
-    [self layoutAbout];
+    [self reloadLocalizedUI];
 }
 
 - (void)applyTheme:(NSNotification *)note {
@@ -123,9 +135,15 @@
     _info.layer.borderColor = TuneThemeBorder().CGColor;
     ((UIImageView *)[_card viewWithTag:1]).layer.borderColor = TuneThemeBorder().CGColor;
     ((UILabel *)[_card viewWithTag:2]).textColor = TuneThemePrimaryText();
-    [_githubButton setTitleColor:TuneThemeAccent() forState:UIControlStateNormal];
+    [_githubButton setTitleColor:[UIColor colorWithRed:0.98f green:0.72f blue:0.74f alpha:1.0f]
+                        forState:UIControlStateNormal];
     _bodyLabel.textColor = TuneThemeSecondaryText();
     [self layoutAbout];
+}
+
+- (void)languageChanged:(NSNotification *)note {
+    (void)note;
+    [self reloadLocalizedUI];
 }
 
 - (void)layoutAbout {
@@ -174,6 +192,10 @@
     NSURL *url = [NSURL URLWithString:@"https://github.com/sqmrak"];
     if ([[UIApplication sharedApplication] canOpenURL:url])
         [[UIApplication sharedApplication] openURL:url];
+}
+
+- (void)backPressed {
+    [self.navigationController popViewControllerAnimated:YES];
 }
 
 @end

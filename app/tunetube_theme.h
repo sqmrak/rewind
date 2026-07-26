@@ -6,19 +6,23 @@
 extern NSString * const TuneTubeThemeDidChangeNotification;
 extern NSString * const TuneTubeFocusSearchNotification;
 
-BOOL TuneTubeThemeIsLight(void);
-void TuneTubeThemeSetLight(BOOL light);
 void TuneTubeStyleNavigationBar(UINavigationBar *bar);
+UIBarButtonItem *TuneTubeBarButtonItem(NSString *title, id target, SEL action);
 
 UIColor *TuneThemeBackgroundTop(void);
 UIColor *TuneThemeBackgroundBottom(void);
+UIColor *TuneThemePlayerBackgroundTop(void);
+UIColor *TuneThemePlayerBackgroundBottom(void);
 UIColor *TuneThemeSurface(void);
 UIColor *TuneThemeSurfaceTop(void);
 UIColor *TuneThemeSurfaceBottom(void);
 UIColor *TuneThemeHeader(void);
 UIColor *TuneThemeHeaderText(void);
 UIColor *TuneThemeNavigationTop(void);
+UIColor *TuneThemeNavigationMiddle(void);
 UIColor *TuneThemeNavigationBottom(void);
+UIColor *TuneThemeNavigationButtonTop(void);
+UIColor *TuneThemeNavigationButtonMiddle(void);
 UIColor *TuneThemeNavigationBorder(void);
 UIColor *TuneThemeRaisedTop(void);
 UIColor *TuneThemeRaisedBottom(void);

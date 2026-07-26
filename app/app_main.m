@@ -2,6 +2,7 @@
 
 #import "main_vc.h"
 #import "ytm_api.h"
+#import "tunetube_theme.h"
 
 @interface UIViewController (TuneTubeRotation)
 @end
@@ -38,7 +39,7 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     (void)launchOptions;
     [application beginReceivingRemoteControlEvents];
     _window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-    _window.backgroundColor = [UIColor whiteColor];
+    _window.backgroundColor = TuneThemeBackgroundBottom();
     MainVC *main = [[[MainVC alloc] init] autorelease];
     UINavigationController *navigation =
         [[[UINavigationController alloc] initWithRootViewController:main] autorelease];

@@ -6,7 +6,6 @@
 #define TUNETUBE_LIBRARY_DEFAULTS_KEY @"TuneTubeFavorites"
 #define TUNETUBE_HISTORY_DEFAULTS_KEY @"TuneTubeRecentTracks"
 #define TUNETUBE_BACKGROUND_AUDIO_DEFAULTS_KEY @"TuneTubeBackgroundAudio"
-#define TUNETUBE_LIGHT_THEME_DEFAULTS_KEY @"TuneTubeLightTheme"
 #define TUNETUBE_BACKGROUND_AUDIO_DID_CHANGE_NOTIFICATION @"TuneTubeBackgroundAudioDidChangeNotification"
 
 #endif /* TUNETUBE_CONFIG_H */

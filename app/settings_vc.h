@@ -5,7 +5,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 @interface TuneSettingsVC : UIViewController <UITableViewDataSource, UITableViewDelegate,
-                                              UIAlertViewDelegate> {
+                                              UIAlertViewDelegate, UIActionSheetDelegate> {
     UITableView *_table;
     CAGradientLayer *_backgroundGradient;
 }

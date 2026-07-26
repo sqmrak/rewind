@@ -5,6 +5,7 @@
 #import "about_vc.h"
 #import "tunetube_config.h"
 #import "tunetube_theme.h"
+#import "tunetube_l10n.h"
 #import "ytm_api.h"
 
 @interface TuneSettingsChromeView : UIView {
@@ -46,6 +47,13 @@
 
 @implementation TuneSettingsVC
 
+- (void)reloadLocalizedUI {
+    self.title = TuneL(@"settings");
+    self.navigationItem.leftBarButtonItem =
+        TuneTubeBarButtonItem(TuneL(@"done"), self, @selector(donePressed));
+    [_table reloadData];
+}
+
 - (void)applyTheme:(NSNotification *)note {
     (void)note;
     self.view.backgroundColor = TuneThemeBackgroundBottom();
@@ -53,7 +61,12 @@
     _backgroundGradient.colors = [NSArray arrayWithObjects:
                                   (id)TuneThemeBackgroundTop().CGColor,
                                   (id)TuneThemeBackgroundBottom().CGColor, nil];
-    [_table reloadData];
+    [self reloadLocalizedUI];
+}
+
+- (void)languageChanged:(NSNotification *)note {
+    (void)note;
+    [self reloadLocalizedUI];
 }
 
 - (void)backgroundAudioChanged:(UISwitch *)toggle {
@@ -62,10 +75,6 @@
     [defaults synchronize];
     [[NSNotificationCenter defaultCenter]
      postNotificationName:TUNETUBE_BACKGROUND_AUDIO_DID_CHANGE_NOTIFICATION object:nil];
-}
-
-- (void)themeChanged:(UISwitch *)toggle {
-    TuneTubeThemeSetLight(toggle.on);
 }
 
 - (void)dealloc {
@@ -83,15 +92,17 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Settings";
+    self.title = TuneL(@"settings");
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applyTheme:)
                                                  name:TuneTubeThemeDidChangeNotification
                                                object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(languageChanged:)
+                                                 name:TUNETUBE_LANGUAGE_DID_CHANGE_NOTIFICATION
+                                               object:nil];
     self.navigationItem.leftBarButtonItem =
-        [[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-                                                       target:self
-                                                       action:@selector(donePressed)] autorelease];
+        TuneTubeBarButtonItem(TuneL(@"done"), self, @selector(donePressed));
 
     _backgroundGradient = [[CAGradientLayer layer] retain];
     _backgroundGradient.colors = [NSArray arrayWithObjects:
@@ -134,9 +145,10 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     (void)tableView;
-    if (section == 0) return 2;
-    if (section == 1) return 2;
-    return 1;
+    if (section == 0) return 1;
+    if (section == 1) return 1; // language
+    if (section == 2) return 2; // api
+    return 1; // about
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
@@ -153,10 +165,10 @@
     label.backgroundColor = [UIColor clearColor];
     label.textColor = TuneThemeAccent();
     label.font = [UIFont boldSystemFontOfSize:11.0f];
-    if (section == 0) label.text = @"PLAYBACK";
-    else if (section == 1) label.text = @"SEARCH";
-    else if (section == 2) label.text = @"APPEARANCE";
-    else label.text = @"TUNETUBE";
+    if (section == 0) label.text = TuneL(@"section_playback");
+    else if (section == 1) label.text = TuneL(@"section_language");
+    else if (section == 2) label.text = TuneL(@"section_search");
+    else label.text = TuneL(@"section_tunetube");
     label.frame = CGRectMake(22.0f, 12.0f, 260.0f, 18.0f);
     [header addSubview:label];
     return header;
@@ -167,7 +179,7 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
-         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     static NSString *cellID = @"TuneTubeSettingsCell";
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellID];
     if (!cell)
@@ -186,51 +198,42 @@
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
 
     if (indexPath.section == 0) {
-        if (indexPath.row == 0) {
-            cell.textLabel.text = @"Background audio";
-            cell.detailTextLabel.text = nil;
-            UISwitch *toggle = [[[UISwitch alloc] initWithFrame:CGRectZero] autorelease];
-            id value = [[NSUserDefaults standardUserDefaults]
-                        objectForKey:TUNETUBE_BACKGROUND_AUDIO_DEFAULTS_KEY];
-            toggle.on = !value || [value boolValue];
-            toggle.onTintColor = TuneThemeAccent();
-            [toggle addTarget:self action:@selector(backgroundAudioChanged:)
-             forControlEvents:UIControlEventValueChanged];
-            cell.accessoryView = toggle;
-        } else {
-            cell.textLabel.text = @"Player mode";
-            cell.detailTextLabel.text = @"Anonymous";
-        }
+        cell.textLabel.text = TuneL(@"background_audio");
+        cell.detailTextLabel.text = nil;
+        UISwitch *toggle = [[[UISwitch alloc] initWithFrame:CGRectZero] autorelease];
+        id value = [[NSUserDefaults standardUserDefaults]
+                    objectForKey:TUNETUBE_BACKGROUND_AUDIO_DEFAULTS_KEY];
+        toggle.on = !value || [value boolValue];
+        toggle.onTintColor = TuneThemeAccent();
+        [toggle addTarget:self action:@selector(backgroundAudioChanged:)
+         forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = toggle;
     } else if (indexPath.section == 1) {
+        cell.textLabel.text = TuneL(@"language");
+        cell.detailTextLabel.text = TuneLanguageIsRussian() ? TuneL(@"russian") : TuneL(@"english");
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    } else if (indexPath.section == 2) {
         NSString *customKey = [[NSUserDefaults standardUserDefaults]
                                 objectForKey:TUNETUBE_API_KEY_DEFAULTS_KEY];
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"YouTube Music API key";
-            cell.detailTextLabel.text = customKey.length ? @"Custom" : @"Built-in";
+            cell.textLabel.text = TuneL(@"api_key");
+            cell.detailTextLabel.text = customKey.length ? TuneL(@"custom") : TuneL(@"built_in");
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            cell.selectionStyle = UITableViewCellSelectionStyleBlue;
+            cell.selectionStyle = UITableViewCellSelectionStyleNone;
         } else {
-            cell.textLabel.text = @"Reset API key";
-            cell.detailTextLabel.text = customKey.length ? @"Use built-in key" : @"Already default";
+            cell.textLabel.text = TuneL(@"reset_api_key");
+            cell.detailTextLabel.text = customKey.length ? TuneL(@"use_builtin_key")
+                                                         : TuneL(@"already_default");
             cell.accessoryType = customKey.length
                 ? UITableViewCellAccessoryDisclosureIndicator : UITableViewCellAccessoryNone;
-            cell.selectionStyle = customKey.length
-                ? UITableViewCellSelectionStyleBlue : UITableViewCellSelectionStyleNone;
+            cell.selectionStyle = UITableViewCellSelectionStyleNone;
         }
-    } else if (indexPath.section == 2) {
-        cell.textLabel.text = @"Light theme";
-        cell.detailTextLabel.text = nil;
-        UISwitch *toggle = [[[UISwitch alloc] initWithFrame:CGRectZero] autorelease];
-        toggle.on = TuneTubeThemeIsLight();
-        toggle.onTintColor = TuneThemeAccent();
-        [toggle addTarget:self action:@selector(themeChanged:)
-         forControlEvents:UIControlEventValueChanged];
-        cell.accessoryView = toggle;
     } else {
-        cell.textLabel.text = @"About TuneTube";
+        cell.textLabel.text = TuneL(@"about_tunetube");
         cell.detailTextLabel.text = TUNETUBE_VERSION;
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-        cell.selectionStyle = UITableViewCellSelectionStyleBlue;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
     }
     return cell;
 }
@@ -244,7 +247,7 @@
     footer.font = [UIFont systemFontOfSize:11.0f];
     footer.numberOfLines = 0;
     footer.textAlignment = NSTextAlignmentCenter;
-    footer.text = @"Youtube Music for the legacy communitty :D";
+    footer.text = TuneL(@"footer_tagline");
     return footer;
 }
 
@@ -253,12 +256,31 @@
     return section == 3 ? 38.0f : 8.0f;
 }
 
+- (void)showLanguagePicker {
+    UIActionSheet *sheet = [[[UIActionSheet alloc]
+                             initWithTitle:TuneL(@"language")
+                             delegate:self
+                             cancelButtonTitle:TuneL(@"cancel")
+                             destructiveButtonTitle:nil
+                             otherButtonTitles:TuneL(@"english"), TuneL(@"russian"), nil]
+                            autorelease];
+    sheet.tag = 900;
+    [sheet showInView:self.view];
+}
+
+- (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+    if (actionSheet.tag != 900) return;
+    if (buttonIndex == actionSheet.cancelButtonIndex) return;
+    if (buttonIndex == 0) TuneSetLanguageCode(@"en");
+    else if (buttonIndex == 1) TuneSetLanguageCode(@"ru");
+}
+
 - (void)showAPIKeyEditor {
-    UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:@"YouTube Music API key"
-                                                     message:@"Leave empty to use the built-in key."
+    UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:TuneL(@"api_key")
+                                                     message:TuneL(@"api_key_hint")
                                                     delegate:self
-                                           cancelButtonTitle:@"Cancel"
-                                           otherButtonTitles:@"Save", nil] autorelease];
+                                           cancelButtonTitle:TuneL(@"cancel")
+                                           otherButtonTitles:TuneL(@"save"), nil] autorelease];
     alert.alertViewStyle = UIAlertViewStylePlainTextInput;
     UITextField *field = [alert textFieldAtIndex:0];
     field.text = [[NSUserDefaults standardUserDefaults]
@@ -285,9 +307,11 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.section == 1 && indexPath.row == 0) {
+    if (indexPath.section == 1) {
+        [self showLanguagePicker];
+    } else if (indexPath.section == 2 && indexPath.row == 0) {
         [self showAPIKeyEditor];
-    } else if (indexPath.section == 1 && indexPath.row == 1) {
+    } else if (indexPath.section == 2 && indexPath.row == 1) {
         [[NSUserDefaults standardUserDefaults] removeObjectForKey:TUNETUBE_API_KEY_DEFAULTS_KEY];
         [[NSUserDefaults standardUserDefaults] synchronize];
         [tableView reloadData];
