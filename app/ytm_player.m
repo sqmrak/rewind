@@ -66,7 +66,7 @@ static void YTMUpdateNowPlaying(YTMPlayer *player) {
     NSMutableDictionary *info = [NSMutableDictionary dictionary];
     if (track.title.length) [info setObject:track.title forKey:@"title"];
     if (track.artist.length)
-        [info setObject:YTMDisplayArtist(track.artist) forKey:@"artist"];
+        [info setObject:YTMTrackArtistText(track) forKey:@"artist"];
     if (track.album.length) [info setObject:track.album forKey:@"albumTitle"];
     NSTimeInterval duration = [player duration];
     if (duration > 0.0) {
@@ -139,6 +139,7 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
 - (id)init {
     self = [super init];
     if (self) {
+        _continuousPlayback = YES;
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(backgroundAudioChanged:)
                                                      name:TUNETUBE_BACKGROUND_AUDIO_DID_CHANGE_NOTIFICATION
@@ -150,6 +151,7 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
 - (YTMTrack *)track { return _track; }
 - (NSArray *)queue { return _queue; }
 - (BOOL)isRepeating { return _repeating; }
+- (id)nativePlayer { return _player; }
 
 - (BOOL)isPlaying {
     return [_player isKindOfClass:[AVPlayer class]] && [(AVPlayer *)_player rate] > 0.0f;
@@ -224,15 +226,17 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
 
     YTMConfigureAudioSession();
 
-    [selectedAPI audioURLForTrack:selectedTrack completion:^(NSURL *url, NSError *error) {
+    // audio only - no music video / clip playback
+    [selectedAPI audioURLForTrack:selectedTrack completion:^(NSURL *audioURL, NSError *audioError) {
         if (generation != _generation) return;
-        if (error || !url) {
-            YTMPlayerNotify(self, error);
+        if (audioError || !audioURL) {
+            YTMPlayerNotify(self, audioError ? audioError :
+                            YTMPlayerError(8, @"track url could not be loaded"));
             return;
         }
-        AVPlayer *av = [[AVPlayer alloc] initWithURL:url];
+        AVPlayer *av = [[AVPlayer alloc] initWithURL:audioURL];
         if (!av) {
-            YTMPlayerNotify(self, YTMPlayerError(9, @"audio player could not be created"));
+            YTMPlayerNotify(self, YTMPlayerError(9, @"media player could not be created"));
             return;
         }
         [_player release];
@@ -272,7 +276,10 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
 }
 
 - (void)nextTrack {
-    if (!_queue.count || _queueIndex + 1 >= (NSInteger)_queue.count) return;
+    if (!_queue.count || _queueIndex + 1 >= (NSInteger)_queue.count) {
+        if (_continuousPlayback) [self loadMoreTracks];
+        return;
+    }
     ++_queueIndex;
     [self playTrack:[_queue objectAtIndex:(NSUInteger)_queueIndex] usingAPI:_api];
 }
@@ -289,10 +296,49 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
         [self playTrack:_track usingAPI:_api];
     } else if (_queue.count && _queueIndex + 1 < (NSInteger)_queue.count) {
         [self nextTrack];
+    } else if (_continuousPlayback) {
+        [self loadMoreTracks];
     } else {
         [_player pause];
         YTMPlayerNotify(self, nil);
     }
+}
+
+- (void)loadMoreTracks {
+    if (_loadingMore || !_api || !_track) return;
+    _loadingMore = YES;
+
+    NSString *query = _track.artist.length ? _track.artist : _track.title;
+    YTMAPI *api = [_api retain];
+    [api search:query completion:^(NSArray *tracks, NSError *error) {
+        NSMutableArray *fresh = [NSMutableArray array];
+        if (!error) {
+            for (YTMTrack *candidate in tracks) {
+                BOOL duplicate = NO;
+                for (YTMTrack *queued in _queue) {
+                    if ([candidate.videoID isEqualToString:queued.videoID]) {
+                        duplicate = YES;
+                        break;
+                    }
+                }
+                if (!duplicate && candidate.videoID.length) {
+                    [fresh addObject:candidate];
+                    if (fresh.count >= 8) break;
+                }
+            }
+        }
+        if (fresh.count) {
+            [_queue addObjectsFromArray:fresh];
+            _loadingMore = NO;
+            [api release];
+            [self nextTrack];
+        } else {
+            _loadingMore = NO;
+            [api release];
+            [_player pause];
+            YTMPlayerNotify(self, error);
+        }
+    }];
 }
 
 - (void)setRepeating:(BOOL)repeating {

@@ -1,6 +1,8 @@
 #import "ytm_api.h"
 
 #import "../core/ytm_model.h"
+#import <CommonCrypto/CommonDigest.h>
+#import <time.h>
 
 static NSString * const YTMErrorDomain = @"com.sqmrak.tunetube.api";
 static NSString * const YTMEndpoint = @"https://music.youtube.com/youtubei/v1";
@@ -81,6 +83,24 @@ static NSString *YTMText(id node) {
     return nil;
 }
 
+static NSString *YTMFindTextForKey(id node, NSString *key) {
+    if ([node isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dict = (NSDictionary *)node;
+        NSString *text = YTMText([dict objectForKey:key]);
+        if (text.length) return text;
+        for (id value in [dict allValues]) {
+            NSString *found = YTMFindTextForKey(value, key);
+            if (found.length) return found;
+        }
+    } else if ([node isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)node) {
+            NSString *found = YTMFindTextForKey(value, key);
+            if (found.length) return found;
+        }
+    }
+    return nil;
+}
+
 static NSString *YTMFindStringForKey(id node, NSString *key) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
@@ -124,6 +144,83 @@ static NSString *YTMThumbnail(id node) {
     return nil;
 }
 
+static BOOL YTMURLLooksLikeChannelAvatar(NSString *url) {
+    if (!url.length) return NO;
+    // channel / artist avatars live on yt3; album art is usually i.ytimg.com
+    return [url rangeOfString:@"yt3.ggpht.com"].location != NSNotFound ||
+           [url rangeOfString:@"yt3.googleusercontent.com"].location != NSNotFound ||
+           [url rangeOfString:@"googleusercontent.com/ytc"].location != NSNotFound;
+}
+
+static NSString *YTMBestAvatarThumbnail(id node) {
+    // prefer channel-style hosts so we do not show album covers as avatars
+    if ([node isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dict = (NSDictionary *)node;
+        NSArray *thumbs = [dict objectForKey:@"thumbnails"];
+        if ([thumbs isKindOfClass:[NSArray class]]) {
+            NSString *best = nil;
+            NSString *any = nil;
+            for (id thumb in thumbs) {
+                NSString *candidate = YTMString([thumb objectForKey:@"url"]);
+                if (!candidate.length) continue;
+                any = candidate;
+                if (YTMURLLooksLikeChannelAvatar(candidate)) best = candidate;
+            }
+            if (best.length) return best;
+            if (any.length) return any;
+        }
+        for (id value in [dict allValues]) {
+            NSString *found = YTMBestAvatarThumbnail(value);
+            if (found.length && YTMURLLooksLikeChannelAvatar(found)) return found;
+        }
+        for (id value in [dict allValues]) {
+            NSString *found = YTMBestAvatarThumbnail(value);
+            if (found.length) return found;
+        }
+    } else if ([node isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)node) {
+            NSString *found = YTMBestAvatarThumbnail(value);
+            if (found.length && YTMURLLooksLikeChannelAvatar(found)) return found;
+        }
+        for (id value in (NSArray *)node) {
+            NSString *found = YTMBestAvatarThumbnail(value);
+            if (found.length) return found;
+        }
+    }
+    return nil;
+}
+
+static NSString *YTMHeaderThumbnail(id node) {
+    if ([node isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dict = (NSDictionary *)node;
+        for (NSString *key in [NSArray arrayWithObjects:
+                               @"musicImmersiveHeaderRenderer",
+                               @"musicVisualHeaderRenderer",
+                               @"musicDetailHeaderRenderer",
+                               @"musicHeaderRenderer",
+                               @"avatar",
+                               @"thumbnail",
+                               @"foregroundThumbnail", nil]) {
+            id header = [dict objectForKey:key];
+            if (!header) continue;
+            NSString *url = YTMBestAvatarThumbnail(header);
+            if (url.length) return url;
+            url = YTMThumbnail(header);
+            if (url.length) return url;
+        }
+        for (id value in [dict allValues]) {
+            NSString *found = YTMHeaderThumbnail(value);
+            if (found.length) return found;
+        }
+    } else if ([node isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)node) {
+            NSString *found = YTMHeaderThumbnail(value);
+            if (found.length) return found;
+        }
+    }
+    return nil;
+}
+
 static NSUInteger YTMClockSeconds(NSString *value) {
     NSArray *parts = [(YTMCleanText(value) ?: @"")
                       componentsSeparatedByString:@":"];
@@ -153,7 +250,26 @@ static BOOL YTMLooksLikeClock(NSString *value) {
 static BOOL YTMIsTypeLabel(NSString *value) {
     return [value caseInsensitiveCompare:@"Song"] == NSOrderedSame ||
            [value caseInsensitiveCompare:@"Video"] == NSOrderedSame ||
-           [value caseInsensitiveCompare:@"Album"] == NSOrderedSame;
+           [value caseInsensitiveCompare:@"Album"] == NSOrderedSame ||
+           [value caseInsensitiveCompare:@"Playlist"] == NSOrderedSame ||
+           [value caseInsensitiveCompare:@"Music"] == NSOrderedSame ||
+           [value caseInsensitiveCompare:@"Episode"] == NSOrderedSame ||
+           [value caseInsensitiveCompare:@"Artist"] == NSOrderedSame ||
+           [value caseInsensitiveCompare:@"Profile"] == NSOrderedSame ||
+           [value caseInsensitiveCompare:@"Podcast"] == NSOrderedSame ||
+           [value caseInsensitiveCompare:@"Mix"] == NSOrderedSame;
+}
+
+static NSString *YTMResultTypeFromText(NSString *value) {
+    NSString *clean = YTMCleanText(value);
+    if (!clean.length) return nil;
+    NSString *first = YTMCleanText([[clean componentsSeparatedByString:@"•"] objectAtIndex:0]);
+    NSArray *types = [NSArray arrayWithObjects:
+                      @"Song", @"Video", @"Album", @"Playlist", @"Episode",
+                      @"Artist", @"Profile", @"Podcast", @"Mix", nil];
+    for (NSString *type in types)
+        if ([first caseInsensitiveCompare:type] == NSOrderedSame) return type;
+    return nil;
 }
 
 static BOOL YTMIsCountText(NSString *value) {
@@ -202,11 +318,124 @@ static NSString *YTMAlbumFromMetadataText(NSString *value) {
 NSString *YTMDisplayArtist(NSString *artist) {
     if (!artist.length || YTMIsPlaceholderArtist(artist)) return @"Unknown artist";
     NSString *displayArtist = YTMArtistFromMetadataText(artist);
-    return displayArtist ?: @"Unknown artist";
+    if (displayArtist.length) return displayArtist;
+    NSString *clean = YTMCleanText(artist);
+    if (clean.length && !YTMIsErrorText(clean) && !YTMIsPlaceholderArtist(clean))
+        return clean;
+    return @"Unknown artist";
+}
+
+NSString *YTMTrackArtistText(YTMTrack *track) {
+    NSString *artist = YTMDisplayArtist(track.artist);
+    if ([artist caseInsensitiveCompare:@"Unknown artist"] != NSOrderedSame)
+        return artist;
+    if (track.isPlaylist) return @"YouTube Music";
+    // keep english token for comparisons; ui localizes separately when needed
+    return @"Unknown artist";
+}
+
+static BOOL YTMBrowseLooksLikeArtist(NSDictionary *browse) {
+    if (![browse isKindOfClass:[NSDictionary class]]) return NO;
+    NSString *browseID = YTMString([browse objectForKey:@"browseId"]);
+    if ([browseID hasPrefix:@"UC"] || [browseID hasPrefix:@"MPLA"] ||
+        [browseID hasPrefix:@"FEmusic_library_privately_owned_artist"])
+        return YES;
+    NSDictionary *context = [browse objectForKey:@"browseEndpointContextSupportedConfigs"];
+    NSDictionary *musicConfig = [context objectForKey:@"browseEndpointContextMusicConfig"];
+    NSString *pageType = YTMString([musicConfig objectForKey:@"pageType"]);
+    if ([pageType rangeOfString:@"ARTIST" options:NSCaseInsensitiveSearch].location != NSNotFound)
+        return YES;
+    return NO;
+}
+
+static NSString *YTMArtistBrowseID(id node) {
+    if ([node isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dict = (NSDictionary *)node;
+        NSString *label = YTMText([dict objectForKey:@"text"]);
+        if (!label) label = YTMText([dict objectForKey:@"defaultText"]);
+        NSDictionary *endpoint = [dict objectForKey:@"navigationEndpoint"];
+        if (![endpoint isKindOfClass:[NSDictionary class]])
+            endpoint = [dict objectForKey:@"defaultNavigationEndpoint"];
+        NSDictionary *browse = [endpoint objectForKey:@"browseEndpoint"];
+        if (YTMBrowseLooksLikeArtist(browse)) {
+            NSString *browseID = YTMString([browse objectForKey:@"browseId"]);
+            if (browseID.length) return browseID;
+        }
+        if ([label rangeOfString:@"go to artist" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+            NSString *browseID = YTMString([browse objectForKey:@"browseId"]);
+            if (browseID.length) return browseID;
+        }
+        for (id value in [dict allValues]) {
+            NSString *found = YTMArtistBrowseID(value);
+            if (found.length) return found;
+        }
+    } else if ([node isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)node) {
+            NSString *found = YTMArtistBrowseID(value);
+            if (found.length) return found;
+        }
+    }
+    return nil;
+}
+
+// pick artist name from a run that links to an artist page
+static NSString *YTMArtistNameFromRuns(id node) {
+    if ([node isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dict = (NSDictionary *)node;
+        NSArray *runs = [dict objectForKey:@"runs"];
+        if ([runs isKindOfClass:[NSArray class]]) {
+            for (id run in runs) {
+                if (![run isKindOfClass:[NSDictionary class]]) continue;
+                NSDictionary *endpoint = [run objectForKey:@"navigationEndpoint"];
+                NSDictionary *browse = [endpoint objectForKey:@"browseEndpoint"];
+                if (!YTMBrowseLooksLikeArtist(browse)) continue;
+                NSString *text = YTMText(run);
+                if (text.length && !YTMIsTypeLabel(text) && !YTMLooksLikeClock(text) &&
+                    !YTMIsCountText(text) && !YTMIsPlaceholderArtist(text))
+                    return text;
+            }
+        }
+        for (id value in [dict allValues]) {
+            NSString *found = YTMArtistNameFromRuns(value);
+            if (found.length) return found;
+        }
+    } else if ([node isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)node) {
+            NSString *found = YTMArtistNameFromRuns(value);
+            if (found.length) return found;
+        }
+    }
+    return nil;
+}
+
+static NSString *YTMResolveResultType(NSString *musicVideoType, NSArray *texts) {
+    if (musicVideoType.length) {
+        // official audio tracks with album art are ATV, not videos
+        if ([musicVideoType rangeOfString:@"ATV" options:NSCaseInsensitiveSearch].location != NSNotFound)
+            return @"Song";
+        if ([musicVideoType rangeOfString:@"OMV" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [musicVideoType rangeOfString:@"UGC" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+            [musicVideoType rangeOfString:@"OFFICIAL_SOURCE"
+                                 options:NSCaseInsensitiveSearch].location != NSNotFound)
+            return @"Video";
+    }
+    for (NSString *text in texts) {
+        NSString *type = YTMResultTypeFromText(text);
+        if (type.length) return type;
+    }
+    // playable items without a video marker stay songs
+    return @"Song";
 }
 
 static NSString *YTMFindClockText(id node) {
-    if ([node isKindOfClass:[NSDictionary class]]) {
+    if ([node isKindOfClass:[NSString class]]) {
+        NSString *text = YTMCleanText((NSString *)node);
+        if (YTMLooksLikeClock(text)) return text;
+        for (NSString *part in [text componentsSeparatedByString:@"•"]) {
+            NSString *candidate = YTMCleanText(part);
+            if (YTMLooksLikeClock(candidate)) return candidate;
+        }
+    } else if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
         for (NSString *key in [NSArray arrayWithObjects:@"text", @"simpleText", nil]) {
             NSString *text = YTMText([dict objectForKey:key]);
@@ -236,26 +465,53 @@ static YTMTrack *YTMTrackFromRenderer(NSDictionary *renderer) {
         if (text) [texts addObject:text];
     }
 
-    NSString *videoID = YTMFindStringForKey(renderer, @"videoId");
-    if (!videoID || [texts count] == 0) return nil;
+    if ([texts count] == 0) return nil;
 
     NSString *title = [texts objectAtIndex:0];
+    BOOL isPlaylist = NO;
+    NSString *musicVideoType = YTMFindStringForKey(renderer, @"musicVideoType");
+    NSString *resultType = YTMResolveResultType(musicVideoType, texts);
+    for (NSString *text in texts)
+        if ([text rangeOfString:@"Playlist" options:NSCaseInsensitiveSearch].location != NSNotFound)
+            isPlaylist = YES;
+    NSString *playlistID = YTMFindStringForKey(renderer, @"playlistId");
+    if (!playlistID.length) {
+        NSString *browseID = YTMFindStringForKey(renderer, @"browseId");
+        if ([browseID hasPrefix:@"VL"] && browseID.length > 2)
+            playlistID = [browseID substringFromIndex:2];
+    }
+    NSString *videoID = YTMFindStringForKey(renderer, @"videoId");
+    if (!videoID.length && !isPlaylist) return nil;
     NSMutableArray *metadata = [NSMutableArray array];
     for (NSUInteger index = 1; index < [texts count]; ++index) {
         NSString *text = [texts objectAtIndex:index];
         /* keep duration separate because some responses put it in its own column */
         if (!YTMLooksLikeClock(text)) [metadata addObject:text];
     }
-    NSUInteger artistIndex = NSNotFound;
-    NSString *artist = nil;
+
+    // prefer the run that actually links to an artist page
+    NSString *artist = YTMArtistNameFromRuns(renderer);
     NSString *album = @"";
-    for (NSUInteger index = 0; index < metadata.count; ++index) {
-        NSString *candidate = YTMArtistFromMetadataText([metadata objectAtIndex:index]);
-        if (!candidate) continue;
-        artist = candidate;
-        artistIndex = index;
-        album = YTMAlbumFromMetadataText([metadata objectAtIndex:index]) ?: @"";
-        break;
+    NSUInteger artistIndex = NSNotFound;
+
+    if (!artist.length) {
+        for (NSUInteger index = 0; index < metadata.count; ++index) {
+            NSString *candidate = YTMArtistFromMetadataText([metadata objectAtIndex:index]);
+            if (!candidate) continue;
+            artist = candidate;
+            artistIndex = index;
+            album = YTMAlbumFromMetadataText([metadata objectAtIndex:index]) ?: @"";
+            break;
+        }
+    } else {
+        // still try to pull album from the first metadata line
+        for (NSUInteger index = 0; index < metadata.count; ++index) {
+            album = YTMAlbumFromMetadataText([metadata objectAtIndex:index]) ?: @"";
+            if (album.length) {
+                artistIndex = index;
+                break;
+            }
+        }
     }
     if (artistIndex != NSNotFound && !album.length) {
         for (NSUInteger index = artistIndex + 1; index < metadata.count; ++index) {
@@ -266,19 +522,77 @@ static YTMTrack *YTMTrackFromRenderer(NSDictionary *renderer) {
             }
         }
     }
+
+    // byline / secondary line often has the clean artist when flex columns do not
+    if (!artist.length) {
+        for (NSString *key in [NSArray arrayWithObjects:
+                               @"longBylineText", @"shortBylineText", @"subtitle", nil]) {
+            NSString *byline = YTMText([renderer objectForKey:key]);
+            NSString *candidate = YTMArtistFromMetadataText(byline);
+            if (candidate.length) {
+                artist = candidate;
+                if (!album.length) album = YTMAlbumFromMetadataText(byline) ?: @"";
+                break;
+            }
+        }
+    }
     if (!artist.length) artist = @"";
+
+    /* split title when artist metadata is missing from YouTube Music response */
+    if ((!artist.length || [artist caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame) &&
+        title.length) {
+        NSArray *separators = [NSArray arrayWithObjects:@" - ", @" – ", @" — ", @" | ", nil];
+        for (NSString *sep in separators) {
+            NSRange range = [title rangeOfString:sep];
+            if (range.location != NSNotFound && range.location > 0 &&
+                range.location + range.length < title.length) {
+                NSString *left = YTMCleanText([title substringToIndex:range.location]);
+                NSString *right = YTMCleanText([title substringFromIndex:range.location + range.length]);
+                // "artist - title" is the usual form
+                if (left.length && right.length && !YTMLooksLikeClock(left)) {
+                    artist = left;
+                    title = right;
+                }
+                break;
+            }
+        }
+    }
 
     NSUInteger duration = 0;
     NSString *clock = YTMFindClockText(renderer);
     if (clock)
         duration = YTMClockSeconds(clock);
 
+    NSString *artistID = isPlaylist ? nil : YTMArtistBrowseID(renderer);
+    NSString *displayArtist = YTMDisplayArtist(artist);
+    // last resort: accessibility label often has "title by artist"
+    if ([displayArtist caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame) {
+        NSString *access = YTMFindTextForKey(renderer, @"accessibilityData");
+        if (!access.length) access = YTMFindTextForKey(renderer, @"label");
+        if (access.length) {
+            NSRange byRange = [access rangeOfString:@" by " options:NSCaseInsensitiveSearch];
+            if (byRange.location != NSNotFound) {
+                NSString *after = YTMCleanText([access substringFromIndex:byRange.location + byRange.length]);
+                // strip trailing " and n more" / duration junk
+                NSArray *cut = [after componentsSeparatedByString:@","];
+                NSString *maybe = YTMCleanText([cut objectAtIndex:0]);
+                NSArray *cut2 = [maybe componentsSeparatedByString:@"•"];
+                maybe = YTMCleanText([cut2 objectAtIndex:0]);
+                if (maybe.length && !YTMIsTypeLabel(maybe) && !YTMLooksLikeClock(maybe))
+                    displayArtist = maybe;
+            }
+        }
+    }
+
     return [[[YTMTrack alloc] initWithVideoID:videoID
                                         title:title
-                                       artist:YTMDisplayArtist(artist)
+                                       artist:displayArtist
                                         album:album
                                 thumbnailURL:YTMThumbnail(renderer)
-                                     duration:duration] autorelease];
+                                     duration:duration
+                                  playlistID:isPlaylist ? playlistID : nil
+                                    artistID:artistID
+                                 resultType:resultType] autorelease];
 }
 
 static void YTMCollectTracks(id node, NSMutableArray *tracks) {
@@ -437,14 +751,38 @@ static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError 
 @synthesize artist = _artist;
 @synthesize album = _album;
 @synthesize thumbnailURL = _thumbnailURL;
+@synthesize playlistID = _playlistID;
+@synthesize artistID = _artistID;
+@synthesize resultType = _resultType;
 @synthesize duration = _duration;
+- (BOOL)isPlaylist { return _playlistID.length > 0; }
+
+- (id)initWithVideoID:(NSString *)videoID
+                title:(NSString *)title
+               artist:(NSString *)artist
+                album:(NSString *)album
+                thumbnailURL:(NSString *)thumbnailURL
+                duration:(NSUInteger)duration {
+    return [self initWithVideoID:videoID
+                            title:title
+                           artist:artist
+                            album:album
+                    thumbnailURL:thumbnailURL
+                      duration:duration
+                      playlistID:nil
+                        artistID:nil
+                     resultType:nil];
+}
 
 - (id)initWithVideoID:(NSString *)videoID
                 title:(NSString *)title
                artist:(NSString *)artist
                 album:(NSString *)album
         thumbnailURL:(NSString *)thumbnailURL
-             duration:(NSUInteger)duration {
+             duration:(NSUInteger)duration
+          playlistID:(NSString *)playlistID
+            artistID:(NSString *)artistID
+         resultType:(NSString *)resultType {
     self = [super init];
     if (!self) return nil;
     _videoID = [videoID copy];
@@ -452,6 +790,9 @@ static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError 
     _artist = [artist copy];
     _album = [album copy];
     _thumbnailURL = [thumbnailURL copy];
+    _playlistID = [playlistID copy];
+    _artistID = [artistID copy];
+    _resultType = [resultType copy];
     _duration = duration;
     return self;
 }
@@ -462,6 +803,9 @@ static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError 
     [_artist release];
     [_album release];
     [_thumbnailURL release];
+    [_playlistID release];
+    [_artistID release];
+    [_resultType release];
     [super dealloc];
 }
 
@@ -537,6 +881,89 @@ static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError 
             return;
         }
         finish(data, networkError);
+    });
+}
+
+- (void)playlistTracksForID:(NSString *)playlistID completion:(YTMSearchCompletion)completion {
+    if (!completion) return;
+    if (!playlistID.length) {
+        completion(nil, YTMError(13, @"playlist has no id"));
+        return;
+    }
+    NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
+                          YTMClientContext(), @"context",
+                          playlistID, @"browseId", nil];
+    NSError *error = nil;
+    NSURLRequest *request = YTMRequest(@"browse", _apiKey, body, &error);
+    NSError *fallbackError = nil;
+    NSURLRequest *fallback = YTMRequestForEndpoint(
+        YTMEndpointFallback, @"https://youtubei.googleapis.com", @"67",
+        YTMClientVersion,
+        @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
+        @"browse", _apiKey, body, &fallbackError);
+    if (!request) {
+        completion(nil, error);
+        return;
+    }
+    YTMSendRequest(request, fallback, ^(NSData *data, NSError *networkError) {
+        if (networkError) {
+            completion(nil, networkError);
+            return;
+        }
+        YTMDecodeResponse(data, ^(id root, NSError *jsonError) {
+            if (jsonError) {
+                completion(nil, jsonError);
+                return;
+            }
+            NSMutableArray *tracks = [NSMutableArray array];
+            YTMCollectTracks(root, tracks);
+            if (!tracks.count) {
+                completion(nil, YTMError(14, @"playlist has no playable tracks"));
+                return;
+            }
+            completion(tracks, nil);
+        });
+    });
+}
+
+- (void)artistInfoForID:(NSString *)artistID completion:(YTMArtistCompletion)completion {
+    if (!completion) return;
+    if (!artistID.length) {
+        completion(nil, nil, YTMError(15, @"artist has no id"));
+        return;
+    }
+    NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
+                          YTMClientContext(), @"context",
+                          artistID, @"browseId", nil];
+    NSError *error = nil;
+    NSURLRequest *request = YTMRequest(@"browse", _apiKey, body, &error);
+    NSError *fallbackError = nil;
+    NSURLRequest *fallback = YTMRequestForEndpoint(
+        YTMEndpointFallback, @"https://youtubei.googleapis.com", @"67",
+        YTMClientVersion,
+        @"Mozilla/5.0 (iPhone; CPU iOS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
+        @"browse", _apiKey, body, &fallbackError);
+    if (!request) {
+        completion(nil, nil, error);
+        return;
+    }
+    YTMSendRequest(request, fallback, ^(NSData *data, NSError *networkError) {
+        if (networkError) {
+            completion(nil, nil, networkError);
+            return;
+        }
+        YTMDecodeResponse(data, ^(id root, NSError *jsonError) {
+            if (jsonError) {
+                completion(nil, nil, jsonError);
+                return;
+            }
+            NSString *name = YTMFindTextForKey(root, @"title");
+            // prefer true channel avatar urls over album art
+            NSString *avatar = YTMBestAvatarThumbnail(root);
+            if (!avatar.length) avatar = YTMHeaderThumbnail(root);
+            if (!avatar.length) avatar = YTMThumbnail(root);
+            completion(name, avatar, nil);
+        });
     });
 }
 

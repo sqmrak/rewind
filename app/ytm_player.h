@@ -16,6 +16,8 @@ extern NSString * const YTMPlayerDidChangeNotification;
     NSInteger _queueIndex;
     NSUInteger _generation;
     BOOL _repeating;
+    BOOL _continuousPlayback;
+    BOOL _loadingMore;
 }
 
 @property(nonatomic, readonly) YTMTrack *track;
@@ -34,6 +36,7 @@ extern NSString * const YTMPlayerDidChangeNotification;
 - (NSTimeInterval)duration;
 - (void)seekToProgress:(float)progress;
 - (void)setRepeating:(BOOL)repeating;
+- (id)nativePlayer;
 
 @end
 
