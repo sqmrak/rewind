@@ -6,6 +6,7 @@
 
 @class TunePlaybackButton;
 @class TuneRoundButton;
+@class YTMTrack;
 
 @interface MainVC : UIViewController <UISearchBarDelegate, UITableViewDataSource, UITableViewDelegate, UIAlertViewDelegate> {
     id _api;
@@ -20,6 +21,9 @@
     UILabel *_sectionTitle;
     UITableView *_table;
     UILabel *_status;
+    UIScrollView *_recommendationScroll;
+    NSMutableArray *_recommendations;
+    YTMTrack *_playlistTrack;
     UIControl *_miniPlayer;
     CAGradientLayer *_miniPlayerGradient;
     UIImageView *_miniArtwork;

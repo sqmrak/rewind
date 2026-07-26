@@ -47,6 +47,10 @@ static UIImage *TuneButtonImage(NSString *name) {
     else
         name = _playing ? @"player-pause.png" : @"player-play.png";
     [self setImage:TuneButtonImage(name) forState:UIControlStateNormal];
+    self.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+    self.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+    self.imageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.clipsToBounds = YES;
 }
 
 @end
@@ -100,6 +104,10 @@ static UIImage *TuneButtonImage(NSString *name) {
             break;
     }
     [self setImage:TuneButtonImage(name) forState:UIControlStateNormal];
+    self.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+    self.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+    self.imageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.clipsToBounds = YES;
 }
 
 @end

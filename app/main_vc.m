@@ -7,10 +7,13 @@
 #import "settings_vc.h"
 #import "player_vc.h"
 #import "library_vc.h"
+#import "playlist_vc.h"
+#import "artist_vc.h"
 #import "play_button.h"
 #import "tunetube_config.h"
 #import "tunetube_image_cache.h"
 #import "tunetube_theme.h"
+#import "tunetube_l10n.h"
 
 static UIImage *TuneMaskImage(UIImage *mask, UIColor *color) {
     if (!mask) return nil;
@@ -53,7 +56,7 @@ static NSString *TunePlaybackErrorText(NSError *error) {
     NSString *lower = [text lowercaseString];
     if ([lower rangeOfString:@"operation could not be completed"].location != NSNotFound ||
         [lower rangeOfString:@"nsurlerrordomain"].location != NSNotFound)
-        return @"couldn't load this song";
+        return TuneL(@"err_load_song");
     return text;
 }
 
@@ -77,6 +80,28 @@ static BOOL TuneIsNetworkError(NSError *error) {
            [lower rangeOfString:@"nsurlerrordomain"].location != NSNotFound;
 }
 
+static BOOL TuneRecommendationArtistIsValid(NSString *value) {
+    NSString *clean = [value stringByTrimmingCharactersInSet:
+                       [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *lower = [clean lowercaseString];
+    NSArray *labels = [NSArray arrayWithObjects:
+                       @"unknown artist", @"episode", @"song", @"video",
+                       @"album", @"playlist", @"music", @"youtube music", nil];
+    NSArray *months = [NSArray arrayWithObjects:
+                       @"jan", @"feb", @"mar", @"apr", @"may", @"jun",
+                       @"jul", @"aug", @"sep", @"oct", @"nov", @"dec", nil];
+    NSArray *parts = [clean componentsSeparatedByString:@" "];
+    if (!clean.length || [labels containsObject:lower] ||
+        [clean rangeOfString:@"•"].location != NSNotFound ||
+        [lower rangeOfString:@" plays"].location != NSNotFound ||
+        [lower rangeOfString:@" views"].location != NSNotFound)
+        return NO;
+    if (parts.count == 3 && [months containsObject:[[parts objectAtIndex:0] lowercaseString]] &&
+        [[parts objectAtIndex:2] integerValue] >= 1900)
+        return NO;
+    return YES;
+}
+
 @interface TuneTrackCell : UITableViewCell {
     UIView *_card;
     CAGradientLayer *_cardGradient;
@@ -85,9 +110,13 @@ static BOOL TuneIsNetworkError(NSError *error) {
     UILabel *_artistLabel;
     UILabel *_durationLabel;
     NSString *_imageURL;
+    YTMTrack *_track;
+    id<TuneArtistTrackCellDelegate> _artistDelegate;
+    UIButton *_artistButton;
 }
 
 @property(nonatomic, readonly) NSString *imageURL;
+- (void)setArtistDelegate:(id<TuneArtistTrackCellDelegate>)delegate;
 - (void)configureWithTrack:(YTMTrack *)track;
 @end
 
@@ -162,6 +191,13 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _durationLabel.font = [UIFont systemFontOfSize:11.0f];
     _durationLabel.textAlignment = NSTextAlignmentRight;
     [_card addSubview:_durationLabel];
+
+    _artistButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
+    _artistButton.adjustsImageWhenHighlighted = NO;
+    _artistButton.accessibilityLabel = TuneL(@"artist_profile");
+    [_artistButton addTarget:self action:@selector(artistPressed:)
+            forControlEvents:UIControlEventTouchUpInside];
+    [_card addSubview:_artistButton];
     return self;
 }
 
@@ -173,6 +209,8 @@ static BOOL TuneIsNetworkError(NSError *error) {
     [_artistLabel release];
     [_durationLabel release];
     [_imageURL release];
+    [_track release];
+    [_artistButton release];
     [super dealloc];
 }
 
@@ -180,21 +218,29 @@ static BOOL TuneIsNetworkError(NSError *error) {
     [super prepareForReuse];
     [_imageURL release];
     _imageURL = nil;
+    [_track release];
+    _track = nil;
     _artwork.image = [UIImage imageNamed:@"Icon.png"];
     _titleLabel.text = nil;
     _artistLabel.text = nil;
     _durationLabel.text = nil;
 }
 
+- (void)setArtistDelegate:(id<TuneArtistTrackCellDelegate>)delegate {
+    _artistDelegate = delegate;
+}
+
 - (void)configureWithTrack:(YTMTrack *)track {
     [self applyTheme];
+    [_track release];
+    _track = [track retain];
     [_imageURL release];
     _imageURL = [track.thumbnailURL copy];
     _titleLabel.text = track.title;
-    _artistLabel.text = YTMDisplayArtist(track.artist);
-    if (track.album.length)
+    _artistLabel.text = YTMTrackArtistText(track);
+    if (!track.isPlaylist && track.album.length)
         _artistLabel.text = [NSString stringWithFormat:@"%@  ·  %@",
-                             YTMDisplayArtist(track.artist), track.album];
+                             YTMTrackArtistText(track), track.album];
 
     NSUInteger seconds = track.duration;
     if (seconds) {
@@ -202,8 +248,17 @@ static BOOL TuneIsNetworkError(NSError *error) {
                                (unsigned long)(seconds / 60),
                                (unsigned long)(seconds % 60)];
     } else {
-        _durationLabel.text = @"MUSIC";
+        _durationLabel.text = track.isPlaylist ? TuneL(@"playlist") : TuneL(@"music");
     }
+    NSString *artistName = YTMTrackArtistText(track);
+    if ([artistName caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame)
+        _artistLabel.text = track.album.length
+            ? [NSString stringWithFormat:@"%@  ·  %@", TuneL(@"unknown_artist"), track.album]
+            : TuneL(@"unknown_artist");
+    BOOL hasArtist = artistName.length > 0 &&
+        [artistName caseInsensitiveCompare:@"Unknown artist"] != NSOrderedSame &&
+        [artistName caseInsensitiveCompare:@"YouTube Music"] != NSOrderedSame;
+    _artistButton.hidden = track.isPlaylist || !hasArtist;
 
     if (!_imageURL.length) return;
     NSString *requestedURL = _imageURL;
@@ -212,6 +267,12 @@ static BOOL TuneIsNetworkError(NSError *error) {
             _artwork.image = image;
         }
     });
+}
+
+- (void)artistPressed:(UIButton *)button {
+    (void)button;
+    if (_artistDelegate && [_artistDelegate respondsToSelector:@selector(tuneArtistCell:didSelectTrack:)])
+        [_artistDelegate tuneArtistCell:self didSelectTrack:_track];
 }
 
 - (void)layoutSubviews {
@@ -228,11 +289,12 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _titleLabel.frame = CGRectMake(textX, textY, MAX(20.0f, right - textX - 48.0f), 22.0f);
     _artistLabel.frame = CGRectMake(textX, textY + 24.0f, MAX(20.0f, right - textX - 8.0f), 19.0f);
     _durationLabel.frame = CGRectMake(right - 48.0f, textY, 48.0f, 18.0f);
+    _artistButton.frame = _artistLabel.frame;
 }
 
 @end
 
-@interface MainVC ()
+@interface MainVC () <TuneArtistTrackCellDelegate>
 - (void)refreshPlayerUI:(NSNotification *)note;
 - (void)loadQuickPicks;
 - (void)settingsPressed;
@@ -240,8 +302,14 @@ static BOOL TuneIsNetworkError(NSError *error) {
 - (void)applyTheme:(NSNotification *)note;
 - (void)appDidBecomeActive:(NSNotification *)note;
 - (void)favoritePressed;
+- (void)buildRecommendationsForQuery:(NSString *)query tracks:(NSArray *)tracks;
+- (void)rebuildRecommendations;
+- (void)recommendationPressed:(UIButton *)button;
+- (void)playlistSwipe:(UISwipeGestureRecognizer *)gesture;
+- (void)showPlaylistPickerForTrack:(YTMTrack *)track;
 - (void)libraryPressed;
 - (void)playerPressed;
+- (void)tuneArtistCell:(id)cell didSelectTrack:(YTMTrack *)track;
 @end
 
 @implementation MainVC
@@ -260,6 +328,9 @@ static BOOL TuneIsNetworkError(NSError *error) {
     [_sectionTitle release];
     [_table release];
     [_status release];
+    [_recommendationScroll release];
+    [_recommendations release];
+    [_playlistTrack release];
     [_miniPlayer release];
     [_miniPlayerGradient release];
     [_miniArtwork release];
@@ -276,20 +347,44 @@ static BOOL TuneIsNetworkError(NSError *error) {
     self.view = view;
 }
 
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.title = @"TuneTube";
-    self.navigationController.navigationBarHidden = NO;
+- (void)reloadLocalizedChrome {
     self.navigationItem.leftBarButtonItem =
-        [[[UIBarButtonItem alloc] initWithTitle:@"Library"
+        [[[UIBarButtonItem alloc] initWithTitle:TuneL(@"library")
                                           style:UIBarButtonItemStyleBordered
                                          target:self
                                          action:@selector(libraryPressed)] autorelease];
     self.navigationItem.rightBarButtonItem =
-        [[[UIBarButtonItem alloc] initWithTitle:@"Settings"
+        [[[UIBarButtonItem alloc] initWithTitle:TuneL(@"settings")
                                           style:UIBarButtonItemStyleBordered
                                          target:self
                                          action:@selector(settingsPressed)] autorelease];
+    _taglineLabel.text = TuneL(@"tagline");
+    _libraryButton.accessibilityLabel = TuneL(@"library");
+    _optionsButton.accessibilityLabel = TuneL(@"settings");
+    _search.placeholder = TuneL(@"search_placeholder");
+    if (!_search.text.length && (!_tracks.count || !_sectionTitle.text.length ||
+        [_sectionTitle.text isEqualToString:TuneL(@"search_results")] == NO)) {
+        // keep search results label if user is mid-search
+    }
+    BOOL searching = _search.text.length > 0;
+    _sectionTitle.text = searching ? TuneL(@"search_results") : TuneL(@"quick_picks");
+    if (![(YTMPlayer *)_player track]) {
+        _nowTitle.text = TuneL(@"nothing_playing");
+        _nowArtist.text = TuneL(@"pick_song");
+    }
+    [_table reloadData];
+}
+
+- (void)languageChanged:(NSNotification *)note {
+    (void)note;
+    [self reloadLocalizedChrome];
+    [self refreshPlayerUI:nil];
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"TuneTube";
+    self.navigationController.navigationBarHidden = NO;
     _tracks = [[NSMutableArray alloc] init];
 
     _backgroundGradient = [[CAGradientLayer layer] retain];
@@ -317,7 +412,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _taglineLabel.backgroundColor = [UIColor clearColor];
     _taglineLabel.textColor = TuneThemeSecondaryText();
     _taglineLabel.font = [UIFont systemFontOfSize:10.0f];
-    _taglineLabel.text = @"LEGACY YOUTUBE MUSIC";
+    _taglineLabel.text = TuneL(@"tagline");
     _brandLabel.hidden = YES;
     _taglineLabel.hidden = YES;
     [self.view addSubview:_taglineLabel];
@@ -325,7 +420,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _libraryButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
     [_libraryButton setImage:TuneMaskImage(TuneLibraryImage(24.0f), TuneThemePrimaryText())
                     forState:UIControlStateNormal];
-    _libraryButton.accessibilityLabel = @"Library";
+    _libraryButton.accessibilityLabel = TuneL(@"library");
     _libraryButton.hidden = YES;
     _libraryButton.imageEdgeInsets = UIEdgeInsetsMake(5.0f, 5.0f, 5.0f, 5.0f);
     _libraryButton.layer.cornerRadius = 8.0f;
@@ -347,7 +442,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
                         forState:UIControlStateNormal];
     else
         [_optionsButton setTitle:@"⚙" forState:UIControlStateNormal];
-    _optionsButton.accessibilityLabel = @"Settings";
+    _optionsButton.accessibilityLabel = TuneL(@"settings");
     _optionsButton.hidden = YES;
     _optionsButton.imageEdgeInsets = UIEdgeInsetsMake(6.0f, 6.0f, 6.0f, 6.0f);
     _optionsButton.layer.cornerRadius = 8.0f;
@@ -359,10 +454,10 @@ static BOOL TuneIsNetworkError(NSError *error) {
     [self.view addSubview:_optionsButton];
 
     _search = [[UISearchBar alloc] initWithFrame:CGRectZero];
-    _search.placeholder = @"Search songs, artists and albums";
+    _search.placeholder = TuneL(@"search_placeholder");
     _search.delegate = self;
-    _search.barStyle = TuneTubeThemeIsLight() ? UIBarStyleDefault : UIBarStyleBlackTranslucent;
-    _search.tintColor = TuneThemeAccent();
+    _search.barStyle = UIBarStyleBlack;
+    _search.tintColor = TuneThemeHeaderText();
     _search.backgroundColor = TuneThemeSearchBackground();
     _search.layer.cornerRadius = 8.0f;
     _search.layer.borderWidth = 1.0f;
@@ -370,11 +465,19 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _search.layer.masksToBounds = YES;
     [self.view addSubview:_search];
 
+    _recommendations = [[NSMutableArray alloc] init];
+    _recommendationScroll = [[UIScrollView alloc] initWithFrame:CGRectZero];
+    _recommendationScroll.backgroundColor = [UIColor clearColor];
+    _recommendationScroll.showsHorizontalScrollIndicator = NO;
+    _recommendationScroll.showsVerticalScrollIndicator = NO;
+    _recommendationScroll.hidden = YES;
+    [self.view addSubview:_recommendationScroll];
+
     _sectionTitle = [[UILabel alloc] initWithFrame:CGRectZero];
     _sectionTitle.backgroundColor = [UIColor clearColor];
     _sectionTitle.textColor = TuneThemePrimaryText();
     _sectionTitle.font = [UIFont boldSystemFontOfSize:12.0f];
-    _sectionTitle.text = @"QUICK PICKS";
+    _sectionTitle.text = TuneL(@"quick_picks");
     [self.view addSubview:_sectionTitle];
 
     _status = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -394,6 +497,12 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _table.backgroundColor = [UIColor clearColor];
     _table.backgroundView = nil;
     _table.contentInset = UIEdgeInsetsMake(2.0f, 0.0f, 4.0f, 0.0f);
+    UISwipeGestureRecognizer *playlistSwipe = [[[UISwipeGestureRecognizer alloc]
+                                                 initWithTarget:self
+                                                 action:@selector(playlistSwipe:)] autorelease];
+    playlistSwipe.direction = UISwipeGestureRecognizerDirectionLeft;
+    playlistSwipe.cancelsTouchesInView = NO;
+    [_table addGestureRecognizer:playlistSwipe];
     [self.view addSubview:_table];
 
     _miniPlayer = [[UIControl alloc] initWithFrame:CGRectZero];
@@ -424,7 +533,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _nowTitle.backgroundColor = [UIColor clearColor];
     _nowTitle.textColor = TuneThemePrimaryText();
     _nowTitle.font = [UIFont boldSystemFontOfSize:14.0f];
-    _nowTitle.text = @"Nothing playing";
+    _nowTitle.text = TuneL(@"nothing_playing");
     _nowTitle.lineBreakMode = UILineBreakModeTailTruncation;
     [_miniPlayer addSubview:_nowTitle];
 
@@ -432,7 +541,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _nowArtist.backgroundColor = [UIColor clearColor];
     _nowArtist.textColor = TuneThemeSecondaryText();
     _nowArtist.font = [UIFont systemFontOfSize:12.0f];
-    _nowArtist.text = @"Pick a song to start";
+    _nowArtist.text = TuneL(@"pick_song");
     _nowArtist.lineBreakMode = UILineBreakModeTailTruncation;
     [_miniPlayer addSubview:_nowArtist];
 
@@ -455,6 +564,10 @@ static BOOL TuneIsNetworkError(NSError *error) {
                                                  name:TuneTubeThemeDidChangeNotification
                                                object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(languageChanged:)
+                                                 name:TUNETUBE_LANGUAGE_DID_CHANGE_NOTIFICATION
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(focusSearch:)
                                                  name:TuneTubeFocusSearchNotification
                                                object:nil];
@@ -464,6 +577,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
                                                object:nil];
     [self loadQuickPicks];
     [self applyTheme:nil];
+    [self reloadLocalizedChrome];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -477,7 +591,9 @@ static BOOL TuneIsNetworkError(NSError *error) {
     CGFloat side = width > 700.0f ? 28.0f : 14.0f;
     CGFloat searchY = 6.0f;
     CGFloat searchHeight = landscape ? 34.0f : 38.0f;
-    CGFloat sectionY = searchY + searchHeight + 10.0f;
+    CGFloat recommendationY = searchY + searchHeight + 4.0f;
+    CGFloat recommendationHeight = _recommendationScroll.hidden ? 0.0f : 34.0f;
+    CGFloat sectionY = recommendationY + recommendationHeight + 8.0f;
     CGFloat bottom = landscape ? (pad ? 76.0f : 70.0f) : 78.0f;
     CGFloat tableY = sectionY + 23.0f;
     CGFloat optionsSize = landscape ? 30.0f : 34.0f;
@@ -500,6 +616,9 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _search.frame = CGRectMake(side, searchY,
                                MAX(80.0f, width - side * 2.0f),
                                searchHeight);
+    _recommendationScroll.frame = CGRectMake(side, recommendationY,
+                                             MAX(80.0f, width - side * 2.0f),
+                                             recommendationHeight);
 
     _sectionTitle.frame = CGRectMake(side + 2.0f, sectionY, width * 0.55f, 19.0f);
     _status.frame = CGRectMake(width * 0.40f, sectionY, width * 0.60f - side, 19.0f);
@@ -546,9 +665,12 @@ static BOOL TuneIsNetworkError(NSError *error) {
 
     _brandLabel.textColor = TuneThemePrimaryText();
     _taglineLabel.textColor = TuneThemeSecondaryText();
-    _search.barStyle = TuneTubeThemeIsLight() ? UIBarStyleDefault : UIBarStyleBlackTranslucent;
-    _search.tintColor = TuneThemeAccent();
+    _search.barStyle = UIBarStyleBlack;
+    _search.tintColor = TuneThemeHeaderText();
     _search.backgroundColor = TuneThemeSearchBackground();
+    SEL searchBarTintSelector = NSSelectorFromString(@"setBarTintColor:");
+    if ([_search respondsToSelector:searchBarTintSelector])
+        [_search performSelector:searchBarTintSelector withObject:TuneThemeNavigationBottom()];
     _search.layer.borderColor = TuneThemeBorder().CGColor;
     _sectionTitle.textColor = TuneThemePrimaryText();
     _status.textColor = TuneThemeMutedText();
@@ -565,6 +687,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
     _miniPlayer.opaque = YES;
     _miniPlayer.layer.shouldRasterize = NO;
     [_table reloadData];
+    [self rebuildRecommendations];
     [self.view setNeedsLayout];
 }
 
@@ -594,6 +717,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
     if (!cell)
         cell = [[[TuneTrackCell alloc] initWithStyle:UITableViewCellStyleDefault
                                       reuseIdentifier:cellID] autorelease];
+    [cell setArtistDelegate:self];
     [cell configureWithTrack:[_tracks objectAtIndex:(NSUInteger)indexPath.row]];
     return cell;
 }
@@ -601,7 +725,7 @@ static BOOL TuneIsNetworkError(NSError *error) {
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     YTMTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
-    _status.text = [NSString stringWithFormat:@"Loading %@", track.title];
+    _status.text = [NSString stringWithFormat:TuneL(@"loading_title"), track.title];
     TuneTubeRecordTrack(track);
     [_player setQueue:_tracks selectedIndex:indexPath.row usingAPI:(YTMAPI *)_api];
     [self.view endEditing:YES];
@@ -612,9 +736,11 @@ static BOOL TuneIsNetworkError(NSError *error) {
                        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (!query.length) return;
 
-    _sectionTitle.text = @"SEARCH RESULTS";
-    _status.text = @"Searching…";
+    _sectionTitle.text = TuneL(@"search_results");
+    _status.text = TuneL(@"searching");
     [searchBar resignFirstResponder];
+    [_recommendations removeAllObjects];
+    [self rebuildRecommendations];
     [_tracks removeAllObjects];
     [_table reloadData];
     [(YTMAPI *)_api search:query completion:^(NSArray *tracks, NSError *error) {
@@ -627,13 +753,13 @@ static BOOL TuneIsNetworkError(NSError *error) {
                     case NSURLErrorDNSLookupFailed:
                     case NSURLErrorCannotConnectToHost:
                     case NSURLErrorSecureConnectionFailed:
-                        _status.text = @"couldn't connect to youtube";
+                        _status.text = TuneL(@"err_connect");
                         break;
                     case NSURLErrorTimedOut:
-                        _status.text = @"youtube request timed out";
+                        _status.text = TuneL(@"err_timeout");
                         break;
                     default:
-                        _status.text = @"youtube search failed";
+                        _status.text = TuneL(@"err_search");
                         break;
                 }
             } else {
@@ -642,14 +768,136 @@ static BOOL TuneIsNetworkError(NSError *error) {
             return;
         }
         [_tracks addObjectsFromArray:tracks];
-        _status.text = [NSString stringWithFormat:@"%lu songs", (unsigned long)_tracks.count];
+        [self buildRecommendationsForQuery:query tracks:tracks];
+        _status.text = [NSString stringWithFormat:TuneL(@"songs_count"),
+                        (unsigned long)_tracks.count];
         [_table reloadData];
     }];
+}
+
+- (void)buildRecommendationsForQuery:(NSString *)query tracks:(NSArray *)tracks {
+    [_recommendations removeAllObjects];
+    for (YTMTrack *track in tracks) {
+        if (track.isPlaylist || !track.resultType.length ||
+            [track.resultType caseInsensitiveCompare:@"Song"] != NSOrderedSame)
+            continue;
+        NSString *clean = [YTMDisplayArtist(track.artist)
+                           stringByTrimmingCharactersInSet:
+                           [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (!TuneRecommendationArtistIsValid(clean) ||
+            [clean caseInsensitiveCompare:query] == NSOrderedSame)
+            continue;
+        BOOL duplicate = NO;
+        for (NSString *existing in _recommendations)
+            if ([existing caseInsensitiveCompare:clean] == NSOrderedSame) {
+                duplicate = YES;
+                break;
+            }
+        if (!duplicate) [_recommendations addObject:clean];
+        if (_recommendations.count >= 8) break;
+    }
+    [self rebuildRecommendations];
+}
+
+- (void)rebuildRecommendations {
+    NSArray *oldViews = [_recommendationScroll.subviews copy];
+    for (UIView *view in oldViews) [view removeFromSuperview];
+    [oldViews release];
+
+    CGFloat x = 0.0f;
+    for (NSString *query in _recommendations) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+        [button setTitle:query forState:UIControlStateNormal];
+        button.titleLabel.font = [UIFont boldSystemFontOfSize:11.0f];
+        button.titleLabel.lineBreakMode = UILineBreakModeTailTruncation;
+        button.contentEdgeInsets = UIEdgeInsetsMake(0.0f, 10.0f, 0.0f, 10.0f);
+        [button sizeToFit];
+        button.frame = CGRectMake(x, 2.0f, MAX(72.0f, button.bounds.size.width), 30.0f);
+        button.layer.cornerRadius = 8.0f;
+        button.layer.borderWidth = 1.0f;
+        button.layer.borderColor = TuneThemeBorder().CGColor;
+        button.backgroundColor = TuneThemeSurface();
+        [button setTitleColor:TuneThemePrimaryText() forState:UIControlStateNormal];
+        [button addTarget:self action:@selector(recommendationPressed:)
+         forControlEvents:UIControlEventTouchUpInside];
+        [_recommendationScroll addSubview:button];
+        x = CGRectGetMaxX(button.frame) + 6.0f;
+    }
+    _recommendationScroll.contentSize = CGSizeMake(x, 34.0f);
+    _recommendationScroll.hidden = _recommendations.count == 0;
+    [self.view setNeedsLayout];
+}
+
+- (void)recommendationPressed:(UIButton *)button {
+    NSString *query = button.titleLabel.text;
+    if (!query.length) return;
+    _search.text = query;
+    [self searchBarSearchButtonClicked:_search];
+}
+
+- (void)playlistSwipe:(UISwipeGestureRecognizer *)gesture {
+    if (gesture.state != UIGestureRecognizerStateEnded) return;
+    CGPoint point = [gesture locationInView:_table];
+    NSIndexPath *indexPath = [_table indexPathForRowAtPoint:point];
+    if (!indexPath || (NSUInteger)indexPath.row >= _tracks.count) return;
+    YTMTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
+    if (track.isPlaylist) return;
+    [self showPlaylistPickerForTrack:track];
+}
+
+- (void)showPlaylistPickerForTrack:(YTMTrack *)track {
+    [_playlistTrack release];
+    _playlistTrack = [track retain];
+    NSArray *names = TuneTubePlaylistNames();
+    UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:TuneL(@"add_to_playlist")
+                                                     message:track.title
+                                                    delegate:self
+                                           cancelButtonTitle:TuneL(@"cancel")
+                                           otherButtonTitles:TuneL(@"new_playlist"), nil] autorelease];
+    for (NSString *name in names) [alert addButtonWithTitle:name];
+    alert.tag = 7401;
+    [alert show];
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+    if (alertView.tag == 7401) {
+        if (buttonIndex == alertView.cancelButtonIndex) return;
+        if (buttonIndex == 1) {
+            UIAlertView *newAlert = [[[UIAlertView alloc] initWithTitle:TuneL(@"new_playlist")
+                                                                message:nil
+                                                               delegate:self
+                                                      cancelButtonTitle:TuneL(@"cancel")
+                                                      otherButtonTitles:TuneL(@"create"), nil] autorelease];
+            newAlert.alertViewStyle = UIAlertViewStylePlainTextInput;
+            newAlert.tag = 7402;
+            [newAlert textFieldAtIndex:0].placeholder = TuneL(@"name_placeholder");
+            [newAlert show];
+            return;
+        }
+        NSUInteger playlistIndex = (NSUInteger)(buttonIndex - 2);
+        NSArray *names = TuneTubePlaylistNames();
+        if (playlistIndex < names.count && _playlistTrack)
+            TuneTubeAddTrackToPlaylist(_playlistTrack, [names objectAtIndex:playlistIndex]);
+    } else if (alertView.tag == 7402 &&
+               buttonIndex != alertView.cancelButtonIndex) {
+        NSString *name = [[alertView textFieldAtIndex:0].text
+                          stringByTrimmingCharactersInSet:
+                          [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (name.length && _playlistTrack) {
+            TuneTubeCreatePlaylist(name);
+            TuneTubeAddTrackToPlaylist(_playlistTrack, name);
+        }
+    }
 }
 
 - (void)playPressed {
     if (![(YTMPlayer *)_player track]) return;
     [(YTMPlayer *)_player toggle];
+}
+
+- (void)tuneArtistCell:(id)cell didSelectTrack:(YTMTrack *)track {
+    (void)cell;
+    TunePushArtistProfile(self, track, (YTMAPI *)_api, (YTMPlayer *)_player);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -705,9 +953,11 @@ static BOOL TuneIsNetworkError(NSError *error) {
     }
     if (player.track) {
         _nowTitle.text = player.track.title;
-        _nowArtist.text = YTMDisplayArtist(player.track.artist);
+        NSString *artistName = YTMTrackArtistText(player.track);
+        _nowArtist.text = [artistName caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame
+            ? TuneL(@"unknown_artist") : artistName;
         [_playButton setPlaying:player.isPlaying];
-        _status.text = player.isPlaying ? @"Playing now" : @"Paused";
+        _status.text = player.isPlaying ? TuneL(@"playing_now") : TuneL(@"paused");
         [_favoriteButton setActive:TuneTubeTrackIsSaved(player.track)];
 
         NSString *requestedURL = [player.track.thumbnailURL copy];
@@ -719,8 +969,8 @@ static BOOL TuneIsNetworkError(NSError *error) {
         });
         [requestedURL release];
     } else {
-        _nowTitle.text = @"Nothing playing";
-        _nowArtist.text = @"Pick a song to start";
+        _nowTitle.text = TuneL(@"nothing_playing");
+        _nowArtist.text = TuneL(@"pick_song");
         _miniArtwork.image = [UIImage imageNamed:@"Icon.png"];
         [_favoriteButton setActive:NO];
         [_playButton setPlaying:NO];
@@ -730,8 +980,8 @@ static BOOL TuneIsNetworkError(NSError *error) {
 - (void)loadQuickPicks {
     if (_search.text.length || _tracks.count) return;
     [_tracks addObjectsFromArray:TuneTubeRecentTracks()];
-    _sectionTitle.text = @"QUICK PICKS";
-    _status.text = _tracks.count ? @"Recently played" : @"";
+    _sectionTitle.text = TuneL(@"quick_picks");
+    _status.text = _tracks.count ? TuneL(@"recently_played") : @"";
     [_table reloadData];
 }
 
@@ -740,10 +990,10 @@ static BOOL TuneIsNetworkError(NSError *error) {
     if (!track) return;
     if (TuneTubeTrackIsSaved(track)) {
         TuneTubeRemoveTrack(track);
-        _status.text = @"Removed from Library";
+        _status.text = TuneL(@"removed_library");
     } else {
         TuneTubeSaveTrack(track);
-        _status.text = @"Added to Library";
+        _status.text = TuneL(@"added_library");
     }
     [_favoriteButton setActive:TuneTubeTrackIsSaved(track)];
 }

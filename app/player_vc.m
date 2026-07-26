@@ -1,14 +1,15 @@
 #import "player_vc.h"
 
-#import <MediaPlayer/MediaPlayer.h>
 #import <QuartzCore/QuartzCore.h>
 
 #import "ytm_api.h"
 #import "ytm_player.h"
 #import "library_vc.h"
+#import "artist_vc.h"
 #import "play_button.h"
 #import "tunetube_image_cache.h"
 #import "tunetube_theme.h"
+#import "tunetube_l10n.h"
 
 static NSString *PlayerTime(NSUInteger seconds) {
     return [NSString stringWithFormat:@"%lu:%02lu",
@@ -119,52 +120,6 @@ static UIImage *TunePlayerSearchImage(CGFloat size) {
 
 @end
 
-static void PlayerStyleVolumeView(MPVolumeView *volumeView) {
-    UIColor *volumeThumbColor = TuneThemeSliderThumb();
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(28.0f, 28.0f), NO, 0.0f);
-    CGContextRef thumbContext = UIGraphicsGetCurrentContext();
-    CGContextSetFillColorWithColor(thumbContext,
-                                   volumeThumbColor.CGColor);
-    CGContextFillEllipseInRect(thumbContext, CGRectMake(2.0f, 2.0f, 24.0f, 24.0f));
-    CGContextSetStrokeColorWithColor(thumbContext, TuneThemeBorder().CGColor);
-    CGContextSetLineWidth(thumbContext, 1.0f);
-    CGContextStrokeEllipseInRect(thumbContext, CGRectMake(2.0f, 2.0f, 24.0f, 24.0f));
-    UIImage *volumeThumb = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-
-    for (UIView *subview in volumeView.subviews) {
-        if (![subview isKindOfClass:[UISlider class]]) continue;
-        UISlider *slider = (UISlider *)subview;
-        if ([slider respondsToSelector:@selector(setMinimumTrackTintColor:)]) {
-            slider.minimumTrackTintColor = TuneThemeSliderMinimum();
-            slider.maximumTrackTintColor = TuneThemeSliderMaximum();
-        }
-        [slider setThumbImage:volumeThumb forState:UIControlStateNormal];
-        [slider setThumbImage:volumeThumb forState:UIControlStateHighlighted];
-        if ([slider respondsToSelector:@selector(setThumbTintColor:)])
-            slider.thumbTintColor = volumeThumbColor;
-        if (volumeView.bounds.size.height > 0.0f && slider.frame.size.height > 0.0f) {
-            CGRect frame = slider.frame;
-            frame.origin.y = 0.0f;
-            frame.size.height = volumeView.bounds.size.height;
-            slider.frame = frame;
-        }
-        break;
-    }
-}
-
-@interface TunePlayerVolumeView : MPVolumeView
-@end
-
-@implementation TunePlayerVolumeView
-
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    PlayerStyleVolumeView(self);
-}
-
-@end
-
 static void PlayerStyleSlider(UISlider *slider) {
     if ([slider respondsToSelector:@selector(setMinimumTrackTintColor:)]) {
         slider.minimumTrackTintColor = TuneThemeSliderMinimum();
@@ -194,6 +149,7 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
 - (void)nextTrackPressed;
 - (void)previousTrackPressed;
 - (void)repeatPressed;
+- (void)artistPressed;
 - (void)applyTheme:(NSNotification *)note;
 @end
 
@@ -225,6 +181,7 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     [_artwork release];
     [_titleLabel release];
     [_artistLabel release];
+    [_artistButton release];
     [_progress release];
     [_elapsedLabel release];
     [_durationLabel release];
@@ -233,7 +190,6 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     [_repeatButton release];
     [_favoriteButton release];
     [_playButton release];
-    [_volumeView release];
     [_progressTimer invalidate];
     [_progressTimer release];
     [super dealloc];
@@ -241,7 +197,7 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
 
 - (void)loadView {
     UIView *view = [[[UIView alloc] initWithFrame:[[UIScreen mainScreen] bounds]] autorelease];
-    view.backgroundColor = TuneThemeBackgroundBottom();
+    view.backgroundColor = TuneThemePlayerBackgroundBottom();
     self.view = view;
 }
 
@@ -258,19 +214,19 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     self.navigationController.navigationBarHidden = NO;
     self.title = @"TuneTube";
     self.navigationItem.leftBarButtonItem =
-        [[[UIBarButtonItem alloc] initWithTitle:@"Back"
+        [[[UIBarButtonItem alloc] initWithTitle:TuneL(@"back")
                                           style:UIBarButtonItemStyleBordered
                                          target:self
                                          action:@selector(backPressed)] autorelease];
     self.navigationItem.rightBarButtonItem =
-        [[[UIBarButtonItem alloc] initWithTitle:@"Library"
+        [[[UIBarButtonItem alloc] initWithTitle:TuneL(@"library")
                                           style:UIBarButtonItemStyleBordered
                                          target:self
                                          action:@selector(libraryPressed)] autorelease];
     _backgroundGradient = [[CAGradientLayer layer] retain];
     _backgroundGradient.colors = [NSArray arrayWithObjects:
-                                  (id)TuneThemeBackgroundTop().CGColor,
-                                  (id)TuneThemeBackgroundBottom().CGColor, nil];
+                                  (id)TuneThemePlayerBackgroundTop().CGColor,
+                                  (id)TuneThemePlayerBackgroundBottom().CGColor, nil];
     _backgroundGradient.locations = [NSArray arrayWithObjects:@0.0f, @1.0f, nil];
     [self.view.layer insertSublayer:(CAGradientLayer *)_backgroundGradient atIndex:0];
 
@@ -320,31 +276,38 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     _artwork = [[UIImageView alloc] initWithFrame:CGRectZero];
     _artwork.image = [UIImage imageNamed:@"Icon.png"];
     _artwork.contentMode = UIViewContentModeScaleAspectFill;
-    _artwork.layer.cornerRadius = 12.0f;
+    _artwork.clipsToBounds = YES;
+    _artwork.backgroundColor = [UIColor colorWithWhite:0.08f alpha:1.0f];
+    _artwork.layer.cornerRadius = 14.0f;
     _artwork.layer.masksToBounds = YES;
     _artwork.layer.borderWidth = 1.0f;
     _artwork.layer.borderColor = TuneThemeBorder().CGColor;
-    _artwork.layer.shadowColor = [UIColor blackColor].CGColor;
-    _artwork.layer.shadowOpacity = 0.7f;
-    _artwork.layer.shadowOffset = CGSizeMake(0.0f, 6.0f);
-    _artwork.layer.shadowRadius = 8.0f;
     [self.view addSubview:_artwork];
 
     _titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _titleLabel.backgroundColor = [UIColor clearColor];
     _titleLabel.textColor = TuneThemePrimaryText();
-    _titleLabel.font = [UIFont boldSystemFontOfSize:22.0f];
+    _titleLabel.font = [UIFont boldSystemFontOfSize:20.0f];
     _titleLabel.textAlignment = NSTextAlignmentCenter;
     _titleLabel.lineBreakMode = UILineBreakModeTailTruncation;
+    _titleLabel.numberOfLines = 2;
     [self.view addSubview:_titleLabel];
 
     _artistLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _artistLabel.backgroundColor = [UIColor clearColor];
     _artistLabel.textColor = TuneThemeSecondaryText();
-    _artistLabel.font = [UIFont systemFontOfSize:12.0f];
+    _artistLabel.font = [UIFont systemFontOfSize:13.0f];
     _artistLabel.textAlignment = NSTextAlignmentCenter;
     _artistLabel.lineBreakMode = UILineBreakModeTailTruncation;
     [self.view addSubview:_artistLabel];
+
+    _artistButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
+    _artistButton.adjustsImageWhenHighlighted = NO;
+    _artistButton.accessibilityLabel = TuneL(@"artist_profile");
+    [_artistButton addTarget:self action:@selector(artistPressed)
+            forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:_artistButton];
+
 
     _progress = [[UISlider alloc] initWithFrame:CGRectZero];
     _progress.minimumValue = 0.0f;
@@ -369,14 +332,6 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     _durationLabel.font = [UIFont systemFontOfSize:11.0f];
     _durationLabel.textAlignment = NSTextAlignmentRight;
     [self.view addSubview:_durationLabel];
-
-    _volumeView = [[TunePlayerVolumeView alloc] initWithFrame:CGRectZero];
-    _volumeView.showsRouteButton = NO;
-    _volumeView.showsVolumeSlider = YES;
-    _volumeView.backgroundColor = [UIColor clearColor];
-    _volumeView.clipsToBounds = NO;
-    [self.view addSubview:_volumeView];
-    PlayerStyleVolumeView(_volumeView);
 
     _playButton = [[TunePlaybackButton alloc] initWithFrame:CGRectZero];
     [_playButton setLightStyle:NO];
@@ -421,17 +376,36 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
                                              selector:@selector(applyTheme:)
                                                  name:TuneTubeThemeDidChangeNotification
                                                object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(languageChanged:)
+                                                 name:TUNETUBE_LANGUAGE_DID_CHANGE_NOTIFICATION
+                                               object:nil];
     [self applyTheme:nil];
+    [self refresh:nil];
+}
+
+- (void)languageChanged:(NSNotification *)note {
+    (void)note;
+    self.navigationItem.leftBarButtonItem =
+        [[[UIBarButtonItem alloc] initWithTitle:TuneL(@"back")
+                                          style:UIBarButtonItemStyleBordered
+                                         target:self
+                                         action:@selector(backPressed)] autorelease];
+    self.navigationItem.rightBarButtonItem =
+        [[[UIBarButtonItem alloc] initWithTitle:TuneL(@"library")
+                                          style:UIBarButtonItemStyleBordered
+                                         target:self
+                                         action:@selector(libraryPressed)] autorelease];
     [self refresh:nil];
 }
 
 - (void)applyTheme:(NSNotification *)note {
     (void)note;
-    self.view.backgroundColor = TuneThemeBackgroundBottom();
+    self.view.backgroundColor = TuneThemePlayerBackgroundBottom();
     TuneTubeStyleNavigationBar(self.navigationController.navigationBar);
     _backgroundGradient.colors = [NSArray arrayWithObjects:
-                                  (id)TuneThemeBackgroundTop().CGColor,
-                                  (id)TuneThemeBackgroundBottom().CGColor, nil];
+                                  (id)TuneThemePlayerBackgroundTop().CGColor,
+                                  (id)TuneThemePlayerBackgroundBottom().CGColor, nil];
     _backgroundGradient.locations = [NSArray arrayWithObjects:@0.0f, @1.0f, nil];
     _headerGradient.frame = _headerBar.bounds;
     _headerGradient.colors = [NSArray arrayWithObjects:
@@ -459,7 +433,6 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     [_favoriteButton applyTheme];
     [_playButton applyTheme];
     PlayerStyleSlider(_progress);
-    PlayerStyleVolumeView(_volumeView);
     [self.view setNeedsLayout];
 }
 
@@ -489,66 +462,53 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     _backgroundGradient.frame = b;
     BOOL landscape = b.size.width > b.size.height;
     BOOL compact = PlayerIsCompactPhone(b.size.height);
-
-    CGFloat headerHeight = 0.0f;
-    CGFloat headerButtonSize = landscape ? 30.0f : 34.0f;
-    CGFloat headerButtonInset = b.size.width > 700.0f ? 28.0f : 14.0f;
-    CGFloat headerButtonY = landscape ? 7.0f : 12.0f;
-    _headerBar.frame = CGRectMake(0.0f, 0.0f, b.size.width, headerHeight);
-    _headerGradient.frame = _headerBar.bounds;
-    _headerSearch.frame = CGRectMake(headerButtonInset, headerButtonY,
-                                     headerButtonSize, headerButtonSize);
-    _headerLibrary.frame = CGRectMake(b.size.width - headerButtonInset - headerButtonSize,
-                                      headerButtonY, headerButtonSize, headerButtonSize);
-    _headerTitle.frame = CGRectMake(headerButtonInset + headerButtonSize + 8.0f, 0.0f,
-                                    b.size.width - (headerButtonInset + headerButtonSize + 8.0f) * 2.0f,
-                                    headerHeight);
-    _headerTitle.font = [UIFont boldSystemFontOfSize:
-                         landscape ? (PlayerIsPad() ? 23.0f : 20.0f) : 25.0f];
+    _headerBar.frame = CGRectZero;
 
     if (landscape) {
         CGFloat side = PlayerIsPad() ? 28.0f : 14.0f;
-        /* keep the wide ipad layout from pressing the artwork against the header */
-        CGFloat top = headerHeight + (PlayerIsPad() ? 28.0f : 8.0f);
-        CGFloat leftWidth = MIN(b.size.height - 56.0f, b.size.width * 0.42f);
-        if (leftWidth < 172.0f) leftWidth = 172.0f;
-        CGFloat artSize = MIN(leftWidth - 18.0f, b.size.height - 116.0f);
-        if (artSize < 132.0f) artSize = 132.0f;
-        if (artSize > 520.0f) artSize = 520.0f;
+        CGFloat top = PlayerIsPad() ? 18.0f : 10.0f;
+        CGFloat leftWidth = MIN(b.size.height - 40.0f, b.size.width * 0.44f);
+        if (leftWidth < 160.0f) leftWidth = 160.0f;
+
+        // square cover, max that still fits title under it
+        CGFloat artSize = MIN(leftWidth - 12.0f, b.size.height - 72.0f);
+        if (artSize < 120.0f) artSize = 120.0f;
         CGFloat artX = side + floorf((leftWidth - artSize) * 0.5f);
-        CGFloat artY = top;
+        CGFloat artY = top + floorf((b.size.height - top - artSize - 52.0f) * 0.35f);
         _artwork.frame = CGRectMake(artX, artY, artSize, artSize);
+        _artwork.layer.cornerRadius = 12.0f;
 
-        CGFloat titleY = CGRectGetMaxY(_artwork.frame) + 7.0f;
-        CGFloat leftTextWidth = leftWidth - 16.0f;
-        _titleLabel.font = [UIFont boldSystemFontOfSize:compact ? 16.0f : 20.0f];
-        _titleLabel.frame = CGRectMake(side + 8.0f, titleY, leftTextWidth, 25.0f);
-        _artistLabel.frame = CGRectMake(side + 8.0f, titleY + 25.0f, leftTextWidth, 18.0f);
+        CGFloat titleY = CGRectGetMaxY(_artwork.frame) + 8.0f;
+        CGFloat leftTextWidth = leftWidth - 8.0f;
+        _titleLabel.font = [UIFont boldSystemFontOfSize:compact ? 15.0f : 17.0f];
+        _titleLabel.numberOfLines = 1;
+        _titleLabel.frame = CGRectMake(side + 4.0f, titleY, leftTextWidth, 22.0f);
+        _artistLabel.font = [UIFont systemFontOfSize:12.0f];
+        _artistLabel.frame = CGRectMake(side + 4.0f, titleY + 22.0f, leftTextWidth, 18.0f);
+        _artistButton.frame = _artistLabel.frame;
 
-        CGFloat rightX = side + leftWidth + (PlayerIsPad() ? 32.0f : 20.0f);
+        CGFloat rightX = side + leftWidth + (PlayerIsPad() ? 28.0f : 16.0f);
         CGFloat rightWidth = MAX(120.0f, b.size.width - rightX - side);
-        CGFloat playSize = compact ? 52.0f : (PlayerIsPad() ? 76.0f : 68.0f);
-        CGFloat small = compact ? 30.0f : (PlayerIsPad() ? 48.0f : 42.0f);
-        CGFloat gap = compact ? 3.0f : 8.0f;
-        CGFloat artworkCenterY = CGRectGetMidY(_artwork.frame);
-        CGFloat sliderY = MAX(headerHeight + 34.0f,
-                              artworkCenterY - floorf(playSize * 0.5f) - 42.0f);
-        _progress.frame = CGRectMake(rightX, sliderY, rightWidth, 24.0f);
-        _elapsedLabel.frame = CGRectMake(rightX + 2.0f, sliderY + 18.0f, 70.0f, 18.0f);
-        _durationLabel.frame = CGRectMake(rightX + rightWidth - 72.0f, sliderY + 18.0f,
-                                          70.0f, 18.0f);
+        CGFloat playSize = compact ? 54.0f : (PlayerIsPad() ? 74.0f : 66.0f);
+        CGFloat small = compact ? 32.0f : (PlayerIsPad() ? 46.0f : 40.0f);
+        CGFloat gap = compact ? 4.0f : 8.0f;
+        CGFloat sliderBlock = 44.0f;
+        CGFloat stackGap = 12.0f;
+        CGFloat blockHeight = sliderBlock + stackGap + playSize;
+        CGFloat blockTop = floorf((b.size.height - blockHeight) * 0.5f);
+        if (blockTop < 14.0f) blockTop = 14.0f;
+        if (blockTop + blockHeight > b.size.height - 10.0f)
+            blockTop = MAX(10.0f, b.size.height - 10.0f - blockHeight);
 
-        CGFloat volumeY = MIN(b.size.height - 32.0f,
-                              artworkCenterY + floorf(playSize * 0.5f) + 12.0f);
-        CGFloat controlTop = sliderY + 38.0f;
-        CGFloat controlBottom = volumeY - 8.0f;
-        CGFloat controlY = controlTop + MAX(0.0f,
-                                            floorf((controlBottom - controlTop - playSize) * 0.5f));
-        if (controlY + playSize > controlBottom)
-            controlY = MAX(controlTop, controlBottom - playSize);
+        _progress.frame = CGRectMake(rightX, blockTop, rightWidth, 24.0f);
+        _elapsedLabel.frame = CGRectMake(rightX + 2.0f, blockTop + 22.0f, 70.0f, 16.0f);
+        _durationLabel.frame = CGRectMake(rightX + rightWidth - 72.0f, blockTop + 22.0f,
+                                          70.0f, 16.0f);
 
+        CGFloat controlY = blockTop + sliderBlock + stackGap;
         CGFloat groupWidth = playSize + (small * 4.0f) + (gap * 4.0f);
-        CGFloat groupX = rightX + MAX(0.0f, floorf((rightWidth - groupWidth) * 0.5f));
+        CGFloat groupX = floorf(rightX + (rightWidth - groupWidth) * 0.5f);
+        groupX = MAX(rightX, MIN(groupX, rightX + rightWidth - groupWidth));
         CGFloat playX = groupX + small + gap + small + gap;
         _playButton.frame = CGRectMake(playX, controlY, playSize, playSize);
         CGFloat smallY = controlY + floorf((playSize - small) * 0.5f);
@@ -558,44 +518,50 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
                                        smallY, small, small);
         _repeatButton.frame = CGRectMake(CGRectGetMaxX(_nextButton.frame) + gap,
                                          smallY, small, small);
-        _volumeView.frame = CGRectMake(rightX, volumeY - 4.0f,
-                                       rightWidth, 24.0f);
-        PlayerStyleVolumeView(_volumeView);
     } else {
-        CGFloat artTop = PlayerIsPad() ? headerHeight + 12.0f : headerHeight + 8.0f;
-        CGFloat artSize;
+        // portrait: cover, then title/artist, then slider, then transport near bottom
+        CGFloat side = PlayerIsPad() ? 48.0f : 22.0f;
+        CGFloat playSize = PlayerIsPad() ? 80.0f : (compact ? 58.0f : 64.0f);
+        CGFloat small = PlayerIsPad() ? 48.0f : (compact ? 38.0f : 42.0f);
+        CGFloat gap = PlayerIsPad() ? 10.0f : 7.0f;
+        CGFloat bottomPad = 16.0f;
+        CGFloat transportH = playSize;
+        CGFloat sliderH = 44.0f;
+        CGFloat metaH = 52.0f;
+        CGFloat usedBottom = bottomPad + transportH + 10.0f + sliderH + 8.0f + metaH;
+        CGFloat artTop = PlayerIsPad() ? 16.0f : 8.0f;
+        CGFloat artMax = b.size.height - artTop - usedBottom;
+        CGFloat artSize = MIN(b.size.width - side * 2.0f, artMax);
         if (PlayerIsPad())
-            artSize = MIN(b.size.width - 96.0f, b.size.height * 0.50f);
+            artSize = MIN(artSize, 480.0f);
         else
-            artSize = MIN(b.size.width - 44.0f, b.size.height - artTop - 190.0f);
-        artSize = MIN(PlayerIsPad() ? 520.0f : 220.0f, MAX(150.0f, artSize));
+            artSize = MIN(artSize, compact ? 200.0f : 240.0f);
+        if (artSize < 120.0f) artSize = 120.0f;
         CGFloat artX = floorf((b.size.width - artSize) * 0.5f);
         _artwork.frame = CGRectMake(artX, artTop, artSize, artSize);
+        _artwork.layer.cornerRadius = 14.0f;
 
-        CGFloat titleY = CGRectGetMaxY(_artwork.frame) + 7.0f;
-        _titleLabel.font = [UIFont boldSystemFontOfSize:PlayerIsPad() ? 24.0f : 20.0f];
-        _titleLabel.frame = CGRectMake(24.0f, titleY, b.size.width - 48.0f, 30.0f);
-        _artistLabel.frame = CGRectMake(24.0f, titleY + 27.0f, b.size.width - 48.0f, 20.0f);
+        CGFloat titleY = CGRectGetMaxY(_artwork.frame) + 10.0f;
+        _titleLabel.font = [UIFont boldSystemFontOfSize:PlayerIsPad() ? 22.0f : 18.0f];
+        _titleLabel.numberOfLines = 2;
+        _titleLabel.frame = CGRectMake(side, titleY, b.size.width - side * 2.0f, 40.0f);
+        _artistLabel.font = [UIFont systemFontOfSize:PlayerIsPad() ? 14.0f : 13.0f];
+        _artistLabel.frame = CGRectMake(side, titleY + 40.0f, b.size.width - side * 2.0f, 18.0f);
+        _artistButton.frame = _artistLabel.frame;
 
-        CGFloat sliderY = CGRectGetMaxY(_artistLabel.frame) + 8.0f;
-        _progress.frame = CGRectMake(24.0f, sliderY, b.size.width - 48.0f, 24.0f);
-        _elapsedLabel.frame = CGRectMake(26.0f, sliderY + 18.0f, 70.0f, 18.0f);
-        _durationLabel.frame = CGRectMake(b.size.width - 96.0f, sliderY + 18.0f,
-                                          70.0f, 18.0f);
+        CGFloat controlY = b.size.height - bottomPad - playSize;
+        CGFloat sliderY = controlY - 10.0f - sliderH;
+        // if meta collides with slider, pull slider down chain is already bottom-up
+        if (sliderY < CGRectGetMaxY(_artistLabel.frame) + 6.0f)
+            sliderY = CGRectGetMaxY(_artistLabel.frame) + 6.0f;
 
-        CGFloat playSize = PlayerIsPad() ? 86.0f : 62.0f;
-        CGFloat small = PlayerIsPad() ? 52.0f : 42.0f;
-        CGFloat gap = PlayerIsPad() ? 9.0f : 7.0f;
-        CGFloat volumeY = MIN(b.size.height - 28.0f,
-                              sliderY + 24.0f + 42.0f + playSize + 8.0f);
-        CGFloat controlTop = sliderY + 38.0f;
-        CGFloat controlBottom = volumeY - 8.0f;
-        CGFloat controlY = controlTop + MAX(0.0f,
-                                            floorf((controlBottom - controlTop - playSize) * 0.5f));
-        if (controlY + playSize > controlBottom)
-            controlY = MAX(controlTop, controlBottom - playSize);
+        _progress.frame = CGRectMake(side, sliderY, b.size.width - side * 2.0f, 24.0f);
+        _elapsedLabel.frame = CGRectMake(side + 2.0f, sliderY + 22.0f, 70.0f, 16.0f);
+        _durationLabel.frame = CGRectMake(b.size.width - side - 72.0f, sliderY + 22.0f,
+                                          70.0f, 16.0f);
+
         CGFloat groupWidth = playSize + (small * 4.0f) + (gap * 4.0f);
-        CGFloat groupX = MAX(0.0f, floorf((b.size.width - groupWidth) * 0.5f));
+        CGFloat groupX = floorf((b.size.width - groupWidth) * 0.5f);
         CGFloat playX = groupX + small + gap + small + gap;
         _playButton.frame = CGRectMake(playX, controlY, playSize, playSize);
         CGFloat smallY = controlY + floorf((playSize - small) * 0.5f);
@@ -605,8 +571,6 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
                                        smallY, small, small);
         _repeatButton.frame = CGRectMake(CGRectGetMaxX(_nextButton.frame) + gap,
                                          smallY, small, small);
-        _volumeView.frame = CGRectMake(24.0f, volumeY - 4.0f, b.size.width - 48.0f, 24.0f);
-        PlayerStyleVolumeView(_volumeView);
     }
 }
 
@@ -621,8 +585,8 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     NSError *error = [[note userInfo] objectForKey:@"error"];
     YTMTrack *track = _player.track;
     if (!track) {
-        _titleLabel.text = @"Nothing playing";
-        _artistLabel.text = @"Choose a track from search";
+        _titleLabel.text = TuneL(@"nothing_playing");
+        _artistLabel.text = TuneL(@"choose_track");
         _elapsedLabel.text = @"0:00";
         _durationLabel.text = @"0:00";
         _progress.value = 0.0f;
@@ -630,19 +594,26 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
         [_favoriteButton setActive:NO];
         [_repeatButton setActive:_player.isRepeating];
         _artwork.image = [UIImage imageNamed:@"Icon.png"];
+        _artistButton.hidden = YES;
         return;
     }
 
     _titleLabel.text = track.title;
     if (error) {
-        _artistLabel.text = YTMDisplayArtist(track.artist);
+        _artistLabel.text = YTMTrackArtistText(track);
         _elapsedLabel.text = @"0:00";
         _durationLabel.text = PlayerTime(track.duration);
         _progress.value = 0.0f;
         [_playButton setPlaying:NO];
         return;
     }
-    _artistLabel.text = YTMDisplayArtist(track.artist);
+    NSString *artistName = YTMTrackArtistText(track);
+    _artistLabel.text = [artistName caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame
+        ? TuneL(@"unknown_artist") : artistName;
+    BOOL hasArtist = artistName.length > 0 &&
+        [artistName caseInsensitiveCompare:@"Unknown artist"] != NSOrderedSame &&
+        [artistName caseInsensitiveCompare:@"YouTube Music"] != NSOrderedSame;
+    _artistButton.hidden = !hasArtist;
     _progress.value = [_player progress];
     _elapsedLabel.text = PlayerTime((NSUInteger)[_player currentTime]);
     _durationLabel.text = PlayerTime((NSUInteger)[_player duration]);
@@ -650,12 +621,13 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     [_favoriteButton setActive:TuneTubeTrackIsSaved(track)];
     [_repeatButton setActive:_player.isRepeating];
 
+    [self.view setNeedsLayout];
+
     NSString *requestedURL = [track.thumbnailURL copy];
     TuneLoadImage(requestedURL, ^(UIImage *image) {
         if (image && _player.track == track &&
-            [requestedURL isEqualToString:track.thumbnailURL]) {
+            [requestedURL isEqualToString:track.thumbnailURL])
             _artwork.image = image;
-        }
     });
     [requestedURL release];
 }
@@ -702,6 +674,11 @@ static BOOL PlayerIsCompactPhone(CGFloat height) {
     if (TuneTubeTrackIsSaved(track)) TuneTubeRemoveTrack(track);
     else TuneTubeSaveTrack(track);
     [_favoriteButton setActive:TuneTubeTrackIsSaved(track)];
+}
+
+- (void)artistPressed {
+    YTMTrack *track = _player.track;
+    TunePushArtistProfile(self, track, _api, _player);
 }
 
 - (void)nextTrackPressed {

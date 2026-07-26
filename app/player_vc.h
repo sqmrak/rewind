@@ -6,7 +6,6 @@
 
 @class YTMPlayer;
 @class YTMAPI;
-@class MPVolumeView;
 @class TunePlaybackButton;
 @class TuneRoundButton;
 
@@ -22,6 +21,7 @@
     UIImageView *_artwork;
     UILabel *_titleLabel;
     UILabel *_artistLabel;
+    UIButton *_artistButton;
     UISlider *_progress;
     UILabel *_elapsedLabel;
     UILabel *_durationLabel;
@@ -30,7 +30,6 @@
     TuneRoundButton *_repeatButton;
     TuneRoundButton *_favoriteButton;
     TunePlaybackButton *_playButton;
-    MPVolumeView *_volumeView;
     NSTimer *_progressTimer;
 }
 

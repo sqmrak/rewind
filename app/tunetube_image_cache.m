@@ -69,11 +69,16 @@ void TuneLoadImage(NSString *urlString, TuneImageCompletion completion) {
 
     UIImage *cached = TuneCachedImage(urlString);
     if (cached) {
-        TuneImageCompletion callback = [completion copy];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            callback(cached);
-        });
-        [callback release];
+        /* invoke completion directly when already on main thread to speed up scrolling */
+        if ([NSThread isMainThread]) {
+            completion(cached);
+        } else {
+            TuneImageCompletion callback = [completion copy];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                callback(cached);
+            });
+            [callback release];
+        }
         return;
     }
 
