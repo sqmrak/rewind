@@ -154,11 +154,11 @@ UIColor *TuneThemeBackgroundBottom(void) {
 }
 
 UIColor *TuneThemePlayerBackgroundTop(void) {
-    return TuneThemeColor(0.55f, 0.22f, 0.24f);
+    return TuneThemeColor(0.15f, 0.15f, 0.17f);
 }
 
 UIColor *TuneThemePlayerBackgroundBottom(void) {
-    return TuneThemeColor(0.40f, 0.05f, 0.07f);
+    return TuneThemeColor(0.01f, 0.01f, 0.015f);
 }
 
 UIColor *TuneThemeSurface(void) {
@@ -182,27 +182,27 @@ UIColor *TuneThemeHeaderText(void) {
 }
 
 UIColor *TuneThemeNavigationTop(void) {
-    return TuneThemeColor(0.62f, 0.30f, 0.31f);
+    return TuneThemeColor(0.12f, 0.13f, 0.15f);
 }
 
 UIColor *TuneThemeNavigationMiddle(void) {
-    return TuneThemeColor(0.50f, 0.16f, 0.18f);
+    return TuneThemeColor(0.07f, 0.08f, 0.09f);
 }
 
 UIColor *TuneThemeNavigationBottom(void) {
-    return TuneThemeColor(0.46f, 0.08f, 0.10f);
+    return TuneThemeColor(0.015f, 0.017f, 0.020f);
 }
 
 UIColor *TuneThemeNavigationButtonTop(void) {
-    return TuneThemeColor(0.72f, 0.39f, 0.42f);
+    return TuneThemeColor(0.28f, 0.30f, 0.33f);
 }
 
 UIColor *TuneThemeNavigationButtonMiddle(void) {
-    return TuneThemeColor(0.60f, 0.22f, 0.25f);
+    return TuneThemeColor(0.16f, 0.18f, 0.20f);
 }
 
 UIColor *TuneThemeNavigationBorder(void) {
-    return TuneThemeColor(0.58f, 0.20f, 0.22f);
+    return TuneThemeColor(0.34f, 0.37f, 0.40f);
 }
 
 UIColor *TuneThemeRaisedTop(void) {
@@ -214,27 +214,27 @@ UIColor *TuneThemeRaisedBottom(void) {
 }
 
 UIColor *TuneThemeRaisedBorder(void) {
-    return TuneThemeColor(0.75f, 0.28f, 0.31f);
+    return TuneThemeColor(0.48f, 0.51f, 0.55f);
 }
 
 UIColor *TuneThemeRaisedText(void) {
-    return TuneThemeColor(0.99f, 0.90f, 0.88f);
+    return [UIColor whiteColor];
 }
 
 UIColor *TuneThemeAccent(void) {
-    return TuneThemeNavigationTop();
+    return TuneThemeColor(0.78f, 0.81f, 0.84f);
 }
 
 UIColor *TuneThemePrimaryText(void) {
-    return TuneThemeColor(1.00f, 0.95f, 0.93f);
+    return [UIColor whiteColor];
 }
 
 UIColor *TuneThemeSecondaryText(void) {
-    return TuneThemeColor(0.93f, 0.78f, 0.77f);
+    return TuneThemeColor(0.91f, 0.93f, 0.95f);
 }
 
 UIColor *TuneThemeMutedText(void) {
-    return TuneThemeColor(0.82f, 0.62f, 0.62f);
+    return TuneThemeColor(0.74f, 0.77f, 0.80f);
 }
 
 UIColor *TuneThemeBorder(void) {
@@ -246,13 +246,13 @@ UIColor *TuneThemeSearchBackground(void) {
 }
 
 UIColor *TuneThemeSliderMinimum(void) {
-    return TuneThemeNavigationTop();
+    return [UIColor whiteColor];
 }
 
 UIColor *TuneThemeSliderMaximum(void) {
-    return TuneThemeNavigationBottom();
+    return TuneThemeColor(0.34f, 0.36f, 0.39f);
 }
 
 UIColor *TuneThemeSliderThumb(void) {
-    return TuneThemeColor(1.00f, 0.96f, 0.94f);
+    return [UIColor whiteColor];
 }

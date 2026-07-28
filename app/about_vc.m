@@ -89,12 +89,12 @@
     name.shadowColor = [UIColor colorWithWhite:0 alpha:0.62f];
     name.shadowOffset = CGSizeMake(0.0f, 1.0f);
     name.font = [UIFont boldSystemFontOfSize:15.0f];
-    name.text = @"TuneTube-v1.0.2-stable";
+    name.text = @"TuneTube-v1.0.3-stable";
     [_card addSubview:name];
 
     _githubButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
     [_githubButton setTitle:@"github.com/sqmrak" forState:UIControlStateNormal];
-    [_githubButton setTitleColor:[UIColor colorWithRed:0.98f green:0.72f blue:0.74f alpha:1.0f]
+    [_githubButton setTitleColor:[UIColor whiteColor]
                         forState:UIControlStateNormal];
     _githubButton.titleLabel.font = [UIFont systemFontOfSize:14.0f];
     _githubButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
@@ -135,7 +135,7 @@
     _info.layer.borderColor = TuneThemeBorder().CGColor;
     ((UIImageView *)[_card viewWithTag:1]).layer.borderColor = TuneThemeBorder().CGColor;
     ((UILabel *)[_card viewWithTag:2]).textColor = TuneThemePrimaryText();
-    [_githubButton setTitleColor:[UIColor colorWithRed:0.98f green:0.72f blue:0.74f alpha:1.0f]
+    [_githubButton setTitleColor:[UIColor whiteColor]
                         forState:UIControlStateNormal];
     _bodyLabel.textColor = TuneThemeSecondaryText();
     [self layoutAbout];

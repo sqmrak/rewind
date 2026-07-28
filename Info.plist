@@ -17,15 +17,15 @@
 	<key>CFBundleSignature</key>
 	<string>TUNE</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.2-stable</string>
+	<string>1.0.3-stable</string>
 	<key>CFBundleVersion</key>
-	<string>1002</string>
+	<string>1004</string>
 	<key>CFBundleIconFiles</key>
 	<array>
-		<string>Icon.png</string>
-		<string>Icon@2x.png</string>
-		<string>Icon-72.png</string>
-		<string>Icon-72@2x.png</string>
+		<string>TuneTubeIcon.png</string>
+		<string>TuneTubeIcon@2x.png</string>
+		<string>TuneTubeIcon-72.png</string>
+		<string>TuneTubeIcon-72@2x.png</string>
 	</array>
 	<key>UIPrerenderedIcon</key>
 	<false/>
