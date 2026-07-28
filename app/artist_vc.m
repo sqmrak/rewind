@@ -6,8 +6,8 @@
 #import "tunetube_theme.h"
 #import "tunetube_l10n.h"
 #import "library_vc.h"
-#import "ytm_api.h"
-#import "ytm_player.h"
+#import "tunetube_api.h"
+#import "tunetube_player.h"
 
 static NSString *TuneArtistImageURL(NSString *url) {
     if (!url.length) return nil;
@@ -43,7 +43,7 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
     UILabel *_durationLabel;
     NSString *_imageURL;
 }
-- (void)configureWithTrack:(YTMTrack *)track artist:(NSString *)artist;
+- (void)configureWithTrack:(TuneTubeTrack *)track artist:(NSString *)artist;
 @end
 
 @implementation TuneArtistCell
@@ -115,18 +115,18 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
     _durationLabel.text = nil;
 }
 
-- (void)configureWithTrack:(YTMTrack *)track artist:(NSString *)artist {
+- (void)configureWithTrack:(TuneTubeTrack *)track artist:(NSString *)artist {
     [_imageURL release];
     _imageURL = [TuneArtistImageURL(track.thumbnailURL) copy];
     _artwork.image = [UIImage imageNamed:@"Icon.png"];
     _titleLabel.text = track.title;
-    _albumLabel.text = artist.length ? artist : TuneL(@"unknown_artist");
+    _albumLabel.text = artist.length ? artist : @"Various Artists";
     if (track.duration) {
         _durationLabel.text = [NSString stringWithFormat:@"%lu:%02lu",
                                (unsigned long)(track.duration / 60),
                                (unsigned long)(track.duration % 60)];
     } else {
-        _durationLabel.text = @"--:--";
+        _durationLabel.text = @"0:00";
     }
     _card.layer.borderColor = TuneThemeBorder().CGColor;
     _cardGradient.colors = [NSArray arrayWithObjects:
@@ -177,9 +177,9 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
 
 - (id)initWithArtist:(NSString *)artist
           artworkURL:(NSString *)artworkURL
-                 api:(YTMAPI *)api
-             player:(YTMPlayer *)player
-          seedTrack:(YTMTrack *)seedTrack {
+                 api:(TuneTubeAPI *)api
+             player:(TuneTubePlayer *)player
+          seedTrack:(TuneTubeTrack *)seedTrack {
     self = [super init];
     if (!self) return nil;
     _artistName = [artist copy];
@@ -332,7 +332,8 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
     [_table reloadData];
 
     if (!_api || !_artistName.length ||
-        [_artistName caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame) {
+        [_artistName caseInsensitiveCompare:@"Various Artists"] == NSOrderedSame ||
+        [_artistName caseInsensitiveCompare:@"YouTube Music"] == NSOrderedSame) {
         _status.text = _tracks.count ? TuneL(@"tracks") : TuneL(@"no_tracks");
         return;
     }
@@ -359,9 +360,9 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
 
         // if we still have no browse id, steal one from matching search hits
         if (!_seedTrack.artistID.length) {
-            for (YTMTrack *track in tracks) {
+            for (TuneTubeTrack *track in tracks) {
                 if (!track.artistID.length) continue;
-                NSString *trackArtist = YTMDisplayArtist(track.artist);
+                NSString *trackArtist = TuneTubeTrackArtistText(track);
                 if ([trackArtist caseInsensitiveCompare:_artistName] != NSOrderedSame)
                     continue;
                 [_api artistInfoForID:track.artistID completion:^(NSString *name,
@@ -376,7 +377,7 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
 
         // last resort: channel-host thumbnail from results (never plain album art)
         if (!_artworkURL.length) {
-            for (YTMTrack *track in tracks) {
+            for (TuneTubeTrack *track in tracks) {
                 NSString *url = track.thumbnailURL;
                 if ([url rangeOfString:@"yt3.ggpht.com"].location != NSNotFound ||
                     [url rangeOfString:@"yt3.googleusercontent.com"].location != NSNotFound) {
@@ -386,9 +387,9 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
             }
         }
 
-        for (YTMTrack *track in tracks) {
+        for (TuneTubeTrack *track in tracks) {
             BOOL duplicate = NO;
-            for (YTMTrack *existing in _tracks) {
+            for (TuneTubeTrack *existing in _tracks) {
                 if (existing.videoID.length && [existing.videoID isEqualToString:track.videoID]) {
                     duplicate = YES;
                     break;
@@ -443,7 +444,7 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if ((NSUInteger)indexPath.row >= _tracks.count) return;
-    YTMTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
+    TuneTubeTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
     if (_player && _api) {
         [_player setQueue:_tracks selectedIndex:indexPath.row usingAPI:_api];
         TuneTubeRecordTrack(track);
@@ -454,12 +455,13 @@ static UIImage *TuneArtistAvatarFallback(NSString *artist, CGFloat size) {
 @end
 
 void TunePushArtistProfile(UIViewController *source,
-                           YTMTrack *track,
-                           YTMAPI *api,
-                           YTMPlayer *player) {
+                           TuneTubeTrack *track,
+                           TuneTubeAPI *api,
+                           TuneTubePlayer *player) {
     if (!source || !track) return;
-    NSString *artist = YTMDisplayArtist(track.artist);
-    if (!artist.length || [artist caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame)
+    NSString *artist = TuneTubeTrackArtistText(track);
+    if (!artist.length || [artist caseInsensitiveCompare:@"Various Artists"] == NSOrderedSame ||
+        [artist caseInsensitiveCompare:@"YouTube Music"] == NSOrderedSame)
         return;
     TuneArtistVC *profile = [[[TuneArtistVC alloc]
                               initWithArtist:artist

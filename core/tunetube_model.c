@@ -1,14 +1,14 @@
-#include "ytm_model.h"
+#include "tunetube_model.h"
 
 #include <ctype.h>
 #include <string.h>
 
-void ytm_track_init(ytm_track_t *track) {
+void tunetube_track_init(tunetube_track_t *track) {
     if (!track) return;
     memset(track, 0, sizeof *track);
 }
 
-int ytm_track_set_text(char *dst, size_t cap, const char *src) {
+int tunetube_track_set_text(char *dst, size_t cap, const char *src) {
     size_t n;
     if (!dst || cap == 0 || !src) return -1;
     n = strlen(src);
@@ -34,7 +34,7 @@ static int duration_value(const char **p, unsigned *out, char unit) {
     return 0;
 }
 
-int ytm_duration_parse(const char *text, unsigned *out_seconds) {
+int tunetube_duration_parse(const char *text, unsigned *out_seconds) {
     const char *p;
     unsigned seconds = 0;
     int seen = 0;

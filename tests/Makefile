@@ -10,8 +10,8 @@ all: test
 test: test_model
 	./test_model
 
-test_model: test_model.c ../core/ytm_model.c ../core/ytm_model.h
-	$(CC) $(CFLAGS) test_model.c ../core/ytm_model.c -o $@
+test_model: test_model.c ../core/tunetube_model.c ../core/tunetube_model.h
+	$(CC) $(CFLAGS) test_model.c ../core/tunetube_model.c -o $@
 
 clean:
 	rm -f test_model

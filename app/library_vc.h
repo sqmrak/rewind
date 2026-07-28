@@ -4,20 +4,20 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 
-@class YTMAPI;
-@class YTMPlayer;
-@class YTMTrack;
+@class TuneTubeAPI;
+@class TuneTubePlayer;
+@class TuneTubeTrack;
 
 NSArray *TuneTubeLibraryTracks(void);
 NSArray *TuneTubeRecentTracks(void);
-void TuneTubeRecordTrack(YTMTrack *track);
-BOOL TuneTubeTrackIsSaved(YTMTrack *track);
-void TuneTubeSaveTrack(YTMTrack *track);
-void TuneTubeRemoveTrack(YTMTrack *track);
+void TuneTubeRecordTrack(TuneTubeTrack *track);
+BOOL TuneTubeTrackIsSaved(TuneTubeTrack *track);
+void TuneTubeSaveTrack(TuneTubeTrack *track);
+void TuneTubeRemoveTrack(TuneTubeTrack *track);
 
 @interface TuneLibraryVC : UIViewController <UITableViewDataSource, UITableViewDelegate> {
-    YTMPlayer *_player;
-    YTMAPI *_api;
+    TuneTubePlayer *_player;
+    TuneTubeAPI *_api;
     NSMutableArray *_tracks;
     UITableView *_table;
     UILabel *_emptyLabel;
@@ -27,7 +27,7 @@ void TuneTubeRemoveTrack(YTMTrack *track);
     CAGradientLayer *_backgroundGradient;
 }
 
-- (id)initWithPlayer:(YTMPlayer *)player api:(YTMAPI *)api;
+- (id)initWithPlayer:(TuneTubePlayer *)player api:(TuneTubeAPI *)api;
 
 @end
 

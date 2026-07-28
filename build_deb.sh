@@ -11,14 +11,14 @@ rm -rf "${STAGE}/Applications/TuneTube.app"
 mkdir -p "${STAGE}/Applications/TuneTube.app"
 cp "${ROOT}/build/TuneTube.app/TuneTube" "${STAGE}/Applications/TuneTube.app/"
 cp "${ROOT}/build/TuneTube.app/Info.plist" "${STAGE}/Applications/TuneTube.app/"
-cp "${ROOT}/build/TuneTube.app/"Icon*.png "${STAGE}/Applications/TuneTube.app/"
+cp "${ROOT}/build/TuneTube.app/"TuneTubeIcon*.png "${STAGE}/Applications/TuneTube.app/"
 cp "${ROOT}/build/TuneTube.app/"Default*.png "${STAGE}/Applications/TuneTube.app/"
 cp "${ROOT}/build/TuneTube.app/icon-settings.png" "${STAGE}/Applications/TuneTube.app/"
 cp "${ROOT}/build/TuneTube.app/sqmrak.jpg" "${STAGE}/Applications/TuneTube.app/"
 cp "${ROOT}/build/TuneTube.app/"player-*.png "${STAGE}/Applications/TuneTube.app/"
 chmod 755 "${STAGE}/Applications/TuneTube.app/TuneTube"
 chmod 644 "${STAGE}/Applications/TuneTube.app/Info.plist"
-chmod 644 "${STAGE}/Applications/TuneTube.app/"Icon*.png
+chmod 644 "${STAGE}/Applications/TuneTube.app/"TuneTubeIcon*.png
 chmod 644 "${STAGE}/Applications/TuneTube.app/"Default*.png
 chmod 644 "${STAGE}/Applications/TuneTube.app/icon-settings.png"
 chmod 644 "${STAGE}/Applications/TuneTube.app/sqmrak.jpg"

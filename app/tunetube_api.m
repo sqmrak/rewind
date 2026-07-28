@@ -1,45 +1,45 @@
-#import "ytm_api.h"
+#import "tunetube_api.h"
 
-#import "../core/ytm_model.h"
+#import "../core/tunetube_model.h"
 #import <CommonCrypto/CommonDigest.h>
 #import <time.h>
 
-static NSString * const YTMErrorDomain = @"com.sqmrak.tunetube.api";
-static NSString * const YTMEndpoint = @"https://music.youtube.com/youtubei/v1";
-static NSString * const YTMEndpointFallback = @"https://youtubei.googleapis.com/youtubei/v1";
-static NSString * const YTMEndpointWebFallback = @"https://www.youtube.com/youtubei/v1";
-static NSString * const YTMClientName = @"WEB_REMIX";
-static NSString * const YTMClientVersion = @"1.20260707.12.00";
-static NSString * const YTMPlayerEndpoint = @"https://www.youtube.com/youtubei/v1";
-static NSString * const YTMPlayerEndpointFallback = @"https://youtubei.googleapis.com/youtubei/v1";
-static NSString * const YTMIOSClientName = @"IOS";
-static NSString * const YTMIOSClientVersion = @"21.26.4";
-static NSString * const YTMAndroidClientName = @"ANDROID";
-static NSString * const YTMAndroidClientVersion = @"21.26.364";
-static NSString * const YTMAndroidVRClientName = @"ANDROID_VR";
-static NSString * const YTMAndroidVRClientVersion = @"1.65.10";
+static NSString * const TuneTubeErrorDomain = @"com.sqmrak.tunetube.api";
+static NSString * const TuneTubeEndpoint = @"https://music.youtube.com/youtubei/v1";
+static NSString * const TuneTubeEndpointFallback = @"https://youtubei.googleapis.com/youtubei/v1";
+static NSString * const TuneTubeEndpointWebFallback = @"https://www.youtube.com/youtubei/v1";
+static NSString * const TuneTubeClientName = @"WEB_REMIX";
+static NSString * const TuneTubeClientVersion = @"1.20260707.12.00";
+static NSString * const TuneTubePlayerEndpoint = @"https://www.youtube.com/youtubei/v1";
+static NSString * const TuneTubePlayerEndpointFallback = @"https://youtubei.googleapis.com/youtubei/v1";
+static NSString * const TuneTubeIOSClientName = @"IOS";
+static NSString * const TuneTubeIOSClientVersion = @"21.26.4";
+static NSString * const TuneTubeAndroidClientName = @"ANDROID";
+static NSString * const TuneTubeAndroidClientVersion = @"21.26.364";
+static NSString * const TuneTubeAndroidVRClientName = @"ANDROID_VR";
+static NSString * const TuneTubeAndroidVRClientVersion = @"1.65.10";
 /* keep a fallback so a fresh install can search before settings is opened */
-NSString * const YTMDefaultAPIKey = @"AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+NSString * const TuneTubeDefaultAPIKey = @"AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 
-static NSError *YTMError(NSInteger code, NSString *message) {
-    return [NSError errorWithDomain:YTMErrorDomain
+static NSError *TuneTubeError(NSInteger code, NSString *message) {
+    return [NSError errorWithDomain:TuneTubeErrorDomain
                                 code:code
                             userInfo:[NSDictionary dictionaryWithObject:message
                                                                  forKey:NSLocalizedDescriptionKey]];
 }
 
-static NSString *YTMString(id value) {
+static NSString *TuneTubeString(id value) {
     return [value isKindOfClass:[NSString class]] ? value : nil;
 }
 
-static NSString *YTMCleanText(NSString *value) {
+static NSString *TuneTubeCleanText(NSString *value) {
     if (!value) return nil;
     NSString *clean = [value stringByTrimmingCharactersInSet:
                        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
     return clean.length ? clean : nil;
 }
 
-static BOOL YTMIsErrorText(NSString *value) {
+static BOOL TuneTubeIsErrorText(NSString *value) {
     if (!value.length) return YES;
     NSString *text = [[value lowercaseString]
                       stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -48,103 +48,106 @@ static BOOL YTMIsErrorText(NSString *value) {
            [text rangeOfString:@"nsurlerrordomain"].location != NSNotFound;
 }
 
-static BOOL YTMIsPlaceholderArtist(NSString *value) {
-    NSString *text = [[YTMCleanText(value) lowercaseString]
+static BOOL TuneTubeIsPlaceholderArtist(NSString *value) {
+    NSString *text = [[TuneTubeCleanText(value) lowercaseString]
                       stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    return [text isEqualToString:@"unknown artist"];
+    return [text isEqualToString:@"unknown artist"] ||
+           [text isEqualToString:@"unknown"] ||
+           [text isEqualToString:@"неизвестный артист"] ||
+           [text isEqualToString:@"неизвестный исполнитель"];
 }
 
-static NSString *YTMText(id node) {
-    if ([node isKindOfClass:[NSString class]]) return YTMCleanText(node);
+static NSString *TuneTubeText(id node) {
+    if ([node isKindOfClass:[NSString class]]) return TuneTubeCleanText(node);
     if (![node isKindOfClass:[NSDictionary class]]) return nil;
 
     NSDictionary *dict = (NSDictionary *)node;
-    NSString *simple = YTMString([dict objectForKey:@"simpleText"]);
-    if (simple) return YTMCleanText(simple);
+    NSString *simple = TuneTubeString([dict objectForKey:@"simpleText"]);
+    if (simple) return TuneTubeCleanText(simple);
 
     NSArray *runs = [dict objectForKey:@"runs"];
     if ([runs isKindOfClass:[NSArray class]]) {
         NSMutableString *text = [NSMutableString string];
         for (id run in runs) {
-            NSString *part = YTMText(run);
+            NSString *part = TuneTubeText(run);
             if (part) [text appendString:part];
         }
-        if ([text length] > 0) return YTMCleanText(text);
+        if ([text length] > 0) return TuneTubeCleanText(text);
     }
 
-    NSString *value = YTMText([dict objectForKey:@"text"]);
-    if (value) return YTMCleanText(value);
+    NSString *value = TuneTubeText([dict objectForKey:@"text"]);
+    if (value) return TuneTubeCleanText(value);
 
     NSDictionary *accessibility = [dict objectForKey:@"accessibility"];
     NSDictionary *accessibilityData = [accessibility objectForKey:@"accessibilityData"];
-    NSString *label = YTMString([accessibilityData objectForKey:@"label"]);
-    if (label) return YTMCleanText(label);
+    NSString *label = TuneTubeString([accessibilityData objectForKey:@"label"]);
+    if (label) return TuneTubeCleanText(label);
 
     return nil;
 }
 
-static NSString *YTMFindTextForKey(id node, NSString *key) {
+static NSString *TuneTubeFindTextForKey(id node, NSString *key) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
-        NSString *text = YTMText([dict objectForKey:key]);
+        NSString *text = TuneTubeText([dict objectForKey:key]);
         if (text.length) return text;
         for (id value in [dict allValues]) {
-            NSString *found = YTMFindTextForKey(value, key);
+            NSString *found = TuneTubeFindTextForKey(value, key);
             if (found.length) return found;
         }
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) {
-            NSString *found = YTMFindTextForKey(value, key);
+            NSString *found = TuneTubeFindTextForKey(value, key);
             if (found.length) return found;
         }
     }
     return nil;
 }
 
-static NSString *YTMFindStringForKey(id node, NSString *key) {
+static NSString *TuneTubeFindStringForKey(id node, NSString *key) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
-        NSString *direct = YTMString([dict objectForKey:key]);
+        NSString *direct = TuneTubeString([dict objectForKey:key]);
         if (direct) return direct;
         for (id value in [dict allValues]) {
-            NSString *found = YTMFindStringForKey(value, key);
+            NSString *found = TuneTubeFindStringForKey(value, key);
             if (found) return found;
         }
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) {
-            NSString *found = YTMFindStringForKey(value, key);
+            NSString *found = TuneTubeFindStringForKey(value, key);
             if (found) return found;
         }
     }
     return nil;
 }
 
-static NSString *YTMThumbnail(id node) {
+static NSString *TuneTubeThumbnail(id node) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
         NSArray *thumbs = [dict objectForKey:@"thumbnails"];
         if ([thumbs isKindOfClass:[NSArray class]]) {
             NSString *url = nil;
             for (id thumb in thumbs) {
-                NSString *candidate = YTMString([thumb objectForKey:@"url"]);
+                NSString *candidate = TuneTubeString([thumb objectForKey:@"url"]);
                 if (candidate) url = candidate;
             }
             if (url) return url;
         }
         for (id value in [dict allValues]) {
-            NSString *found = YTMThumbnail(value);
+            NSString *found = TuneTubeThumbnail(value);
             if (found) return found;
         }
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) {
-            NSString *found = YTMThumbnail(value);
+            NSString *found = TuneTubeThumbnail(value);
             if (found) return found;
         }
     }
     return nil;
 }
 
-static BOOL YTMURLLooksLikeChannelAvatar(NSString *url) {
+static BOOL TuneTubeURLLooksLikeChannelAvatar(NSString *url) {
     if (!url.length) return NO;
     // channel / artist avatars live on yt3; album art is usually i.ytimg.com
     return [url rangeOfString:@"yt3.ggpht.com"].location != NSNotFound ||
@@ -152,7 +155,7 @@ static BOOL YTMURLLooksLikeChannelAvatar(NSString *url) {
            [url rangeOfString:@"googleusercontent.com/ytc"].location != NSNotFound;
 }
 
-static NSString *YTMBestAvatarThumbnail(id node) {
+static NSString *TuneTubeBestAvatarThumbnail(id node) {
     // prefer channel-style hosts so we do not show album covers as avatars
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
@@ -161,36 +164,36 @@ static NSString *YTMBestAvatarThumbnail(id node) {
             NSString *best = nil;
             NSString *any = nil;
             for (id thumb in thumbs) {
-                NSString *candidate = YTMString([thumb objectForKey:@"url"]);
+                NSString *candidate = TuneTubeString([thumb objectForKey:@"url"]);
                 if (!candidate.length) continue;
                 any = candidate;
-                if (YTMURLLooksLikeChannelAvatar(candidate)) best = candidate;
+                if (TuneTubeURLLooksLikeChannelAvatar(candidate)) best = candidate;
             }
             if (best.length) return best;
             if (any.length) return any;
         }
         for (id value in [dict allValues]) {
-            NSString *found = YTMBestAvatarThumbnail(value);
-            if (found.length && YTMURLLooksLikeChannelAvatar(found)) return found;
+            NSString *found = TuneTubeBestAvatarThumbnail(value);
+            if (found.length && TuneTubeURLLooksLikeChannelAvatar(found)) return found;
         }
         for (id value in [dict allValues]) {
-            NSString *found = YTMBestAvatarThumbnail(value);
+            NSString *found = TuneTubeBestAvatarThumbnail(value);
             if (found.length) return found;
         }
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) {
-            NSString *found = YTMBestAvatarThumbnail(value);
-            if (found.length && YTMURLLooksLikeChannelAvatar(found)) return found;
+            NSString *found = TuneTubeBestAvatarThumbnail(value);
+            if (found.length && TuneTubeURLLooksLikeChannelAvatar(found)) return found;
         }
         for (id value in (NSArray *)node) {
-            NSString *found = YTMBestAvatarThumbnail(value);
+            NSString *found = TuneTubeBestAvatarThumbnail(value);
             if (found.length) return found;
         }
     }
     return nil;
 }
 
-static NSString *YTMHeaderThumbnail(id node) {
+static NSString *TuneTubeHeaderThumbnail(id node) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
         for (NSString *key in [NSArray arrayWithObjects:
@@ -203,43 +206,43 @@ static NSString *YTMHeaderThumbnail(id node) {
                                @"foregroundThumbnail", nil]) {
             id header = [dict objectForKey:key];
             if (!header) continue;
-            NSString *url = YTMBestAvatarThumbnail(header);
+            NSString *url = TuneTubeBestAvatarThumbnail(header);
             if (url.length) return url;
-            url = YTMThumbnail(header);
+            url = TuneTubeThumbnail(header);
             if (url.length) return url;
         }
         for (id value in [dict allValues]) {
-            NSString *found = YTMHeaderThumbnail(value);
+            NSString *found = TuneTubeHeaderThumbnail(value);
             if (found.length) return found;
         }
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) {
-            NSString *found = YTMHeaderThumbnail(value);
+            NSString *found = TuneTubeHeaderThumbnail(value);
             if (found.length) return found;
         }
     }
     return nil;
 }
 
-static NSUInteger YTMClockSeconds(NSString *value) {
-    NSArray *parts = [(YTMCleanText(value) ?: @"")
+static NSUInteger TuneTubeClockSeconds(NSString *value) {
+    NSArray *parts = [(TuneTubeCleanText(value) ?: @"")
                       componentsSeparatedByString:@":"];
     NSUInteger result = 0;
     for (NSString *part in parts) {
-        NSInteger n = [(YTMCleanText(part) ?: @"") integerValue];
+        NSInteger n = [(TuneTubeCleanText(part) ?: @"") integerValue];
         if (n < 0 || n > 3600) return 0;
         result = result * 60u + (NSUInteger)n;
     }
     return result;
 }
 
-static BOOL YTMLooksLikeClock(NSString *value) {
-    NSArray *parts = [(YTMCleanText(value) ?: @"")
+static BOOL TuneTubeLooksLikeClock(NSString *value) {
+    NSArray *parts = [(TuneTubeCleanText(value) ?: @"")
                       componentsSeparatedByString:@":"];
     if ([parts count] < 2 || [parts count] > 3) return NO;
     NSCharacterSet *notDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
     for (NSString *part in parts) {
-        NSString *clean = YTMCleanText(part);
+        NSString *clean = TuneTubeCleanText(part);
         if (![clean length] || [clean rangeOfCharacterFromSet:notDigits].location != NSNotFound)
             return NO;
     }
@@ -247,7 +250,7 @@ static BOOL YTMLooksLikeClock(NSString *value) {
     return seconds < 60;
 }
 
-static BOOL YTMIsTypeLabel(NSString *value) {
+static BOOL TuneTubeIsTypeLabel(NSString *value) {
     return [value caseInsensitiveCompare:@"Song"] == NSOrderedSame ||
            [value caseInsensitiveCompare:@"Video"] == NSOrderedSame ||
            [value caseInsensitiveCompare:@"Album"] == NSOrderedSame ||
@@ -260,10 +263,10 @@ static BOOL YTMIsTypeLabel(NSString *value) {
            [value caseInsensitiveCompare:@"Mix"] == NSOrderedSame;
 }
 
-static NSString *YTMResultTypeFromText(NSString *value) {
-    NSString *clean = YTMCleanText(value);
+static NSString *TuneTubeResultTypeFromText(NSString *value) {
+    NSString *clean = TuneTubeCleanText(value);
     if (!clean.length) return nil;
-    NSString *first = YTMCleanText([[clean componentsSeparatedByString:@"•"] objectAtIndex:0]);
+    NSString *first = TuneTubeCleanText([[clean componentsSeparatedByString:@"•"] objectAtIndex:0]);
     NSArray *types = [NSArray arrayWithObjects:
                       @"Song", @"Video", @"Album", @"Playlist", @"Episode",
                       @"Artist", @"Profile", @"Podcast", @"Mix", nil];
@@ -272,106 +275,106 @@ static NSString *YTMResultTypeFromText(NSString *value) {
     return nil;
 }
 
-static BOOL YTMIsCountText(NSString *value) {
-    NSString *text = [[YTMCleanText(value) lowercaseString]
+static BOOL TuneTubeIsCountText(NSString *value) {
+    NSString *text = [[TuneTubeCleanText(value) lowercaseString]
                       stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     return [text hasSuffix:@" view"] || [text hasSuffix:@" views"] ||
            [text hasSuffix:@" play"] || [text hasSuffix:@" plays"];
 }
 
-static NSString *YTMArtistFromMetadataText(NSString *value) {
-    NSString *clean = YTMCleanText(value);
-    if (!clean || YTMIsErrorText(clean) || YTMIsPlaceholderArtist(clean) ||
-        YTMLooksLikeClock(clean) ||
-        YTMIsCountText(clean)) return nil;
+static NSString *TuneTubeArtistFromMetadataText(NSString *value) {
+    NSString *clean = TuneTubeCleanText(value);
+    if (!clean || TuneTubeIsErrorText(clean) || TuneTubeIsPlaceholderArtist(clean) ||
+        TuneTubeLooksLikeClock(clean) ||
+        TuneTubeIsCountText(clean)) return nil;
 
     NSArray *parts = [clean componentsSeparatedByString:@"•"];
     if ([parts count] > 1) {
-        BOOL typeLabel = YTMIsTypeLabel(YTMCleanText([parts objectAtIndex:0]));
-        NSString *artist = YTMCleanText([parts objectAtIndex:typeLabel ? 1 : 0]);
-        if (!artist || YTMIsErrorText(artist) || YTMIsPlaceholderArtist(artist) ||
-            YTMLooksLikeClock(artist) ||
-            YTMIsCountText(artist)) return nil;
+        BOOL typeLabel = TuneTubeIsTypeLabel(TuneTubeCleanText([parts objectAtIndex:0]));
+        NSString *artist = TuneTubeCleanText([parts objectAtIndex:typeLabel ? 1 : 0]);
+        if (!artist || TuneTubeIsErrorText(artist) || TuneTubeIsPlaceholderArtist(artist) ||
+            TuneTubeLooksLikeClock(artist) ||
+            TuneTubeIsCountText(artist)) return nil;
         return artist;
     }
 
-    return YTMIsTypeLabel(clean) ? nil : clean;
+    return TuneTubeIsTypeLabel(clean) ? nil : clean;
 }
 
-static NSString *YTMAlbumFromMetadataText(NSString *value) {
-    NSString *clean = YTMCleanText(value);
+static NSString *TuneTubeAlbumFromMetadataText(NSString *value) {
+    NSString *clean = TuneTubeCleanText(value);
     if (!clean) return nil;
 
     NSArray *parts = [clean componentsSeparatedByString:@"•"];
     if ([parts count] < 2) return nil;
 
-    BOOL typeLabel = YTMIsTypeLabel(YTMCleanText([parts objectAtIndex:0]));
+    BOOL typeLabel = TuneTubeIsTypeLabel(TuneTubeCleanText([parts objectAtIndex:0]));
     NSUInteger albumIndex = typeLabel ? 2 : 1;
     if ([parts count] <= albumIndex)
         return nil;
 
-    NSString *album = YTMCleanText([parts objectAtIndex:albumIndex]);
-    return YTMIsErrorText(album) || YTMLooksLikeClock(album) || YTMIsCountText(album)
+    NSString *album = TuneTubeCleanText([parts objectAtIndex:albumIndex]);
+    return TuneTubeIsErrorText(album) || TuneTubeLooksLikeClock(album) || TuneTubeIsCountText(album)
         ? nil : album;
 }
 
-NSString *YTMDisplayArtist(NSString *artist) {
-    if (!artist.length || YTMIsPlaceholderArtist(artist)) return @"Unknown artist";
-    NSString *displayArtist = YTMArtistFromMetadataText(artist);
+NSString *TuneTubeDisplayArtist(NSString *artist) {
+    if (!artist.length || TuneTubeIsPlaceholderArtist(artist)) return @"Unknown artist";
+    NSString *displayArtist = TuneTubeArtistFromMetadataText(artist);
     if (displayArtist.length) return displayArtist;
-    NSString *clean = YTMCleanText(artist);
-    if (clean.length && !YTMIsErrorText(clean) && !YTMIsPlaceholderArtist(clean))
+    NSString *clean = TuneTubeCleanText(artist);
+    if (clean.length && !TuneTubeIsErrorText(clean) && !TuneTubeIsPlaceholderArtist(clean) &&
+        !TuneTubeIsTypeLabel(clean))
         return clean;
     return @"Unknown artist";
 }
 
-NSString *YTMTrackArtistText(YTMTrack *track) {
-    NSString *artist = YTMDisplayArtist(track.artist);
+NSString *TuneTubeTrackArtistText(TuneTubeTrack *track) {
+    NSString *artist = TuneTubeDisplayArtist(track.artist);
     if ([artist caseInsensitiveCompare:@"Unknown artist"] != NSOrderedSame)
         return artist;
     if (track.isPlaylist) return @"YouTube Music";
-    // keep english token for comparisons; ui localizes separately when needed
-    return @"Unknown artist";
+    return @"Various Artists";
 }
 
-static BOOL YTMBrowseLooksLikeArtist(NSDictionary *browse) {
+static BOOL TuneTubeBrowseLooksLikeArtist(NSDictionary *browse) {
     if (![browse isKindOfClass:[NSDictionary class]]) return NO;
-    NSString *browseID = YTMString([browse objectForKey:@"browseId"]);
+    NSString *browseID = TuneTubeString([browse objectForKey:@"browseId"]);
     if ([browseID hasPrefix:@"UC"] || [browseID hasPrefix:@"MPLA"] ||
         [browseID hasPrefix:@"FEmusic_library_privately_owned_artist"])
         return YES;
     NSDictionary *context = [browse objectForKey:@"browseEndpointContextSupportedConfigs"];
     NSDictionary *musicConfig = [context objectForKey:@"browseEndpointContextMusicConfig"];
-    NSString *pageType = YTMString([musicConfig objectForKey:@"pageType"]);
+    NSString *pageType = TuneTubeString([musicConfig objectForKey:@"pageType"]);
     if ([pageType rangeOfString:@"ARTIST" options:NSCaseInsensitiveSearch].location != NSNotFound)
         return YES;
     return NO;
 }
 
-static NSString *YTMArtistBrowseID(id node) {
+static NSString *TuneTubeArtistBrowseID(id node) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
-        NSString *label = YTMText([dict objectForKey:@"text"]);
-        if (!label) label = YTMText([dict objectForKey:@"defaultText"]);
+        NSString *label = TuneTubeText([dict objectForKey:@"text"]);
+        if (!label) label = TuneTubeText([dict objectForKey:@"defaultText"]);
         NSDictionary *endpoint = [dict objectForKey:@"navigationEndpoint"];
         if (![endpoint isKindOfClass:[NSDictionary class]])
             endpoint = [dict objectForKey:@"defaultNavigationEndpoint"];
         NSDictionary *browse = [endpoint objectForKey:@"browseEndpoint"];
-        if (YTMBrowseLooksLikeArtist(browse)) {
-            NSString *browseID = YTMString([browse objectForKey:@"browseId"]);
+        if (TuneTubeBrowseLooksLikeArtist(browse)) {
+            NSString *browseID = TuneTubeString([browse objectForKey:@"browseId"]);
             if (browseID.length) return browseID;
         }
         if ([label rangeOfString:@"go to artist" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-            NSString *browseID = YTMString([browse objectForKey:@"browseId"]);
+            NSString *browseID = TuneTubeString([browse objectForKey:@"browseId"]);
             if (browseID.length) return browseID;
         }
         for (id value in [dict allValues]) {
-            NSString *found = YTMArtistBrowseID(value);
+            NSString *found = TuneTubeArtistBrowseID(value);
             if (found.length) return found;
         }
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) {
-            NSString *found = YTMArtistBrowseID(value);
+            NSString *found = TuneTubeArtistBrowseID(value);
             if (found.length) return found;
         }
     }
@@ -379,7 +382,7 @@ static NSString *YTMArtistBrowseID(id node) {
 }
 
 // pick artist name from a run that links to an artist page
-static NSString *YTMArtistNameFromRuns(id node) {
+static NSString *TuneTubeArtistNameFromRuns(id node) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
         NSArray *runs = [dict objectForKey:@"runs"];
@@ -388,27 +391,27 @@ static NSString *YTMArtistNameFromRuns(id node) {
                 if (![run isKindOfClass:[NSDictionary class]]) continue;
                 NSDictionary *endpoint = [run objectForKey:@"navigationEndpoint"];
                 NSDictionary *browse = [endpoint objectForKey:@"browseEndpoint"];
-                if (!YTMBrowseLooksLikeArtist(browse)) continue;
-                NSString *text = YTMText(run);
-                if (text.length && !YTMIsTypeLabel(text) && !YTMLooksLikeClock(text) &&
-                    !YTMIsCountText(text) && !YTMIsPlaceholderArtist(text))
+                if (!TuneTubeBrowseLooksLikeArtist(browse)) continue;
+                NSString *text = TuneTubeText(run);
+                if (text.length && !TuneTubeIsTypeLabel(text) && !TuneTubeLooksLikeClock(text) &&
+                    !TuneTubeIsCountText(text) && !TuneTubeIsPlaceholderArtist(text))
                     return text;
             }
         }
         for (id value in [dict allValues]) {
-            NSString *found = YTMArtistNameFromRuns(value);
+            NSString *found = TuneTubeArtistNameFromRuns(value);
             if (found.length) return found;
         }
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) {
-            NSString *found = YTMArtistNameFromRuns(value);
+            NSString *found = TuneTubeArtistNameFromRuns(value);
             if (found.length) return found;
         }
     }
     return nil;
 }
 
-static NSString *YTMResolveResultType(NSString *musicVideoType, NSArray *texts) {
+static NSString *TuneTubeResolveResultType(NSString *musicVideoType, NSArray *texts) {
     if (musicVideoType.length) {
         // official audio tracks with album art are ATV, not videos
         if ([musicVideoType rangeOfString:@"ATV" options:NSCaseInsensitiveSearch].location != NSNotFound)
@@ -420,48 +423,48 @@ static NSString *YTMResolveResultType(NSString *musicVideoType, NSArray *texts) 
             return @"Video";
     }
     for (NSString *text in texts) {
-        NSString *type = YTMResultTypeFromText(text);
+        NSString *type = TuneTubeResultTypeFromText(text);
         if (type.length) return type;
     }
     // playable items without a video marker stay songs
     return @"Song";
 }
 
-static NSString *YTMFindClockText(id node) {
+static NSString *TuneTubeFindClockText(id node) {
     if ([node isKindOfClass:[NSString class]]) {
-        NSString *text = YTMCleanText((NSString *)node);
-        if (YTMLooksLikeClock(text)) return text;
+        NSString *text = TuneTubeCleanText((NSString *)node);
+        if (TuneTubeLooksLikeClock(text)) return text;
         for (NSString *part in [text componentsSeparatedByString:@"•"]) {
-            NSString *candidate = YTMCleanText(part);
-            if (YTMLooksLikeClock(candidate)) return candidate;
+            NSString *candidate = TuneTubeCleanText(part);
+            if (TuneTubeLooksLikeClock(candidate)) return candidate;
         }
     } else if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
         for (NSString *key in [NSArray arrayWithObjects:@"text", @"simpleText", nil]) {
-            NSString *text = YTMText([dict objectForKey:key]);
-            if (text && YTMLooksLikeClock(text)) return text;
+            NSString *text = TuneTubeText([dict objectForKey:key]);
+            if (text && TuneTubeLooksLikeClock(text)) return text;
         }
         for (id value in [dict allValues]) {
-            NSString *found = YTMFindClockText(value);
+            NSString *found = TuneTubeFindClockText(value);
             if (found) return found;
         }
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) {
-            NSString *found = YTMFindClockText(value);
+            NSString *found = TuneTubeFindClockText(value);
             if (found) return found;
         }
     }
     return nil;
 }
 
-static YTMTrack *YTMTrackFromRenderer(NSDictionary *renderer) {
+static TuneTubeTrack *TuneTubeTrackFromRenderer(NSDictionary *renderer) {
     NSDictionary *columns = [renderer objectForKey:@"flexColumns"];
     if (![columns isKindOfClass:[NSArray class]] || [columns count] == 0) return nil;
 
     NSMutableArray *texts = [NSMutableArray array];
     for (NSDictionary *column in columns) {
         NSDictionary *columnRenderer = [column objectForKey:@"musicResponsiveListItemFlexColumnRenderer"];
-        NSString *text = YTMText([columnRenderer objectForKey:@"text"]);
+        NSString *text = TuneTubeText([columnRenderer objectForKey:@"text"]);
         if (text) [texts addObject:text];
     }
 
@@ -469,44 +472,44 @@ static YTMTrack *YTMTrackFromRenderer(NSDictionary *renderer) {
 
     NSString *title = [texts objectAtIndex:0];
     BOOL isPlaylist = NO;
-    NSString *musicVideoType = YTMFindStringForKey(renderer, @"musicVideoType");
-    NSString *resultType = YTMResolveResultType(musicVideoType, texts);
+    NSString *musicVideoType = TuneTubeFindStringForKey(renderer, @"musicVideoType");
+    NSString *resultType = TuneTubeResolveResultType(musicVideoType, texts);
     for (NSString *text in texts)
         if ([text rangeOfString:@"Playlist" options:NSCaseInsensitiveSearch].location != NSNotFound)
             isPlaylist = YES;
-    NSString *playlistID = YTMFindStringForKey(renderer, @"playlistId");
+    NSString *playlistID = TuneTubeFindStringForKey(renderer, @"playlistId");
     if (!playlistID.length) {
-        NSString *browseID = YTMFindStringForKey(renderer, @"browseId");
+        NSString *browseID = TuneTubeFindStringForKey(renderer, @"browseId");
         if ([browseID hasPrefix:@"VL"] && browseID.length > 2)
             playlistID = [browseID substringFromIndex:2];
     }
-    NSString *videoID = YTMFindStringForKey(renderer, @"videoId");
+    NSString *videoID = TuneTubeFindStringForKey(renderer, @"videoId");
     if (!videoID.length && !isPlaylist) return nil;
     NSMutableArray *metadata = [NSMutableArray array];
     for (NSUInteger index = 1; index < [texts count]; ++index) {
         NSString *text = [texts objectAtIndex:index];
         /* keep duration separate because some responses put it in its own column */
-        if (!YTMLooksLikeClock(text)) [metadata addObject:text];
+        if (!TuneTubeLooksLikeClock(text)) [metadata addObject:text];
     }
 
     // prefer the run that actually links to an artist page
-    NSString *artist = YTMArtistNameFromRuns(renderer);
+    NSString *artist = TuneTubeArtistNameFromRuns(renderer);
     NSString *album = @"";
     NSUInteger artistIndex = NSNotFound;
 
     if (!artist.length) {
         for (NSUInteger index = 0; index < metadata.count; ++index) {
-            NSString *candidate = YTMArtistFromMetadataText([metadata objectAtIndex:index]);
+            NSString *candidate = TuneTubeArtistFromMetadataText([metadata objectAtIndex:index]);
             if (!candidate) continue;
             artist = candidate;
             artistIndex = index;
-            album = YTMAlbumFromMetadataText([metadata objectAtIndex:index]) ?: @"";
+            album = TuneTubeAlbumFromMetadataText([metadata objectAtIndex:index]) ?: @"";
             break;
         }
     } else {
         // still try to pull album from the first metadata line
         for (NSUInteger index = 0; index < metadata.count; ++index) {
-            album = YTMAlbumFromMetadataText([metadata objectAtIndex:index]) ?: @"";
+            album = TuneTubeAlbumFromMetadataText([metadata objectAtIndex:index]) ?: @"";
             if (album.length) {
                 artistIndex = index;
                 break;
@@ -515,7 +518,7 @@ static YTMTrack *YTMTrackFromRenderer(NSDictionary *renderer) {
     }
     if (artistIndex != NSNotFound && !album.length) {
         for (NSUInteger index = artistIndex + 1; index < metadata.count; ++index) {
-            NSString *candidate = YTMArtistFromMetadataText([metadata objectAtIndex:index]);
+            NSString *candidate = TuneTubeArtistFromMetadataText([metadata objectAtIndex:index]);
             if (candidate && ![candidate isEqualToString:artist]) {
                 album = candidate;
                 break;
@@ -526,12 +529,13 @@ static YTMTrack *YTMTrackFromRenderer(NSDictionary *renderer) {
     // byline / secondary line often has the clean artist when flex columns do not
     if (!artist.length) {
         for (NSString *key in [NSArray arrayWithObjects:
-                               @"longBylineText", @"shortBylineText", @"subtitle", nil]) {
-            NSString *byline = YTMText([renderer objectForKey:key]);
-            NSString *candidate = YTMArtistFromMetadataText(byline);
+                               @"longBylineText", @"shortBylineText", @"bylineText",
+                               @"ownerText", @"subtitle", @"artist", nil]) {
+            NSString *byline = TuneTubeFindTextForKey(renderer, key);
+            NSString *candidate = TuneTubeArtistFromMetadataText(byline);
             if (candidate.length) {
                 artist = candidate;
-                if (!album.length) album = YTMAlbumFromMetadataText(byline) ?: @"";
+                if (!album.length) album = TuneTubeAlbumFromMetadataText(byline) ?: @"";
                 break;
             }
         }
@@ -546,10 +550,10 @@ static YTMTrack *YTMTrackFromRenderer(NSDictionary *renderer) {
             NSRange range = [title rangeOfString:sep];
             if (range.location != NSNotFound && range.location > 0 &&
                 range.location + range.length < title.length) {
-                NSString *left = YTMCleanText([title substringToIndex:range.location]);
-                NSString *right = YTMCleanText([title substringFromIndex:range.location + range.length]);
+                NSString *left = TuneTubeCleanText([title substringToIndex:range.location]);
+                NSString *right = TuneTubeCleanText([title substringFromIndex:range.location + range.length]);
                 // "artist - title" is the usual form
-                if (left.length && right.length && !YTMLooksLikeClock(left)) {
+                if (left.length && right.length && !TuneTubeLooksLikeClock(left)) {
                     artist = left;
                     title = right;
                 }
@@ -559,70 +563,70 @@ static YTMTrack *YTMTrackFromRenderer(NSDictionary *renderer) {
     }
 
     NSUInteger duration = 0;
-    NSString *clock = YTMFindClockText(renderer);
+    NSString *clock = TuneTubeFindClockText(renderer);
     if (clock)
-        duration = YTMClockSeconds(clock);
+        duration = TuneTubeClockSeconds(clock);
 
-    NSString *artistID = isPlaylist ? nil : YTMArtistBrowseID(renderer);
-    NSString *displayArtist = YTMDisplayArtist(artist);
+    NSString *artistID = isPlaylist ? nil : TuneTubeArtistBrowseID(renderer);
+    NSString *displayArtist = TuneTubeDisplayArtist(artist);
     // last resort: accessibility label often has "title by artist"
     if ([displayArtist caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame) {
-        NSString *access = YTMFindTextForKey(renderer, @"accessibilityData");
-        if (!access.length) access = YTMFindTextForKey(renderer, @"label");
+        NSString *access = TuneTubeFindTextForKey(renderer, @"accessibilityData");
+        if (!access.length) access = TuneTubeFindTextForKey(renderer, @"label");
         if (access.length) {
             NSRange byRange = [access rangeOfString:@" by " options:NSCaseInsensitiveSearch];
             if (byRange.location != NSNotFound) {
-                NSString *after = YTMCleanText([access substringFromIndex:byRange.location + byRange.length]);
+                NSString *after = TuneTubeCleanText([access substringFromIndex:byRange.location + byRange.length]);
                 // strip trailing " and n more" / duration junk
                 NSArray *cut = [after componentsSeparatedByString:@","];
-                NSString *maybe = YTMCleanText([cut objectAtIndex:0]);
+                NSString *maybe = TuneTubeCleanText([cut objectAtIndex:0]);
                 NSArray *cut2 = [maybe componentsSeparatedByString:@"•"];
-                maybe = YTMCleanText([cut2 objectAtIndex:0]);
-                if (maybe.length && !YTMIsTypeLabel(maybe) && !YTMLooksLikeClock(maybe))
+                maybe = TuneTubeCleanText([cut2 objectAtIndex:0]);
+                if (maybe.length && !TuneTubeIsTypeLabel(maybe) && !TuneTubeLooksLikeClock(maybe))
                     displayArtist = maybe;
             }
         }
     }
 
-    return [[[YTMTrack alloc] initWithVideoID:videoID
+    return [[[TuneTubeTrack alloc] initWithVideoID:videoID
                                         title:title
                                        artist:displayArtist
                                         album:album
-                                thumbnailURL:YTMThumbnail(renderer)
+                                thumbnailURL:TuneTubeThumbnail(renderer)
                                      duration:duration
                                   playlistID:isPlaylist ? playlistID : nil
                                     artistID:artistID
                                  resultType:resultType] autorelease];
 }
 
-static void YTMCollectTracks(id node, NSMutableArray *tracks) {
+static void TuneTubeCollectTracks(id node, NSMutableArray *tracks) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
         NSDictionary *renderer = [dict objectForKey:@"musicResponsiveListItemRenderer"];
         if ([renderer isKindOfClass:[NSDictionary class]]) {
-            YTMTrack *track = YTMTrackFromRenderer(renderer);
+            TuneTubeTrack *track = TuneTubeTrackFromRenderer(renderer);
             if (track) {
                 [tracks addObject:track];
                 return;
             }
         }
-        for (id value in [dict allValues]) YTMCollectTracks(value, tracks);
+        for (id value in [dict allValues]) TuneTubeCollectTracks(value, tracks);
     } else if ([node isKindOfClass:[NSArray class]]) {
-        for (id value in (NSArray *)node) YTMCollectTracks(value, tracks);
+        for (id value in (NSArray *)node) TuneTubeCollectTracks(value, tracks);
     }
 }
 
-static NSDictionary *YTMClientContext(void) {
+static NSDictionary *TuneTubeClientContext(void) {
     NSDictionary *client = [NSDictionary dictionaryWithObjectsAndKeys:
-                            YTMClientName, @"clientName",
-                            YTMClientVersion, @"clientVersion",
+                            TuneTubeClientName, @"clientName",
+                            TuneTubeClientVersion, @"clientVersion",
                             @"en", @"hl",
                             @"US", @"gl",
                             nil];
     return [NSDictionary dictionaryWithObject:client forKey:@"client"];
 }
 
-static NSDictionary *YTMPlayerContext(NSString *clientName, NSString *clientVersion) {
+static NSDictionary *TuneTubePlayerContext(NSString *clientName, NSString *clientVersion) {
     NSMutableDictionary *client = [NSMutableDictionary dictionaryWithObjectsAndKeys:
                                    clientName, @"clientName",
                                    clientVersion, @"clientVersion",
@@ -630,13 +634,13 @@ static NSDictionary *YTMPlayerContext(NSString *clientName, NSString *clientVers
                                    @"US", @"gl",
                                    nil];
 
-    if ([clientName isEqualToString:YTMIOSClientName]) {
+    if ([clientName isEqualToString:TuneTubeIOSClientName]) {
         [client setObject:@"Apple" forKey:@"deviceMake"];
         [client setObject:@"iPhone16,2" forKey:@"deviceModel"];
         [client setObject:@"iPhone" forKey:@"osName"];
         [client setObject:@"18.3.2.22D82" forKey:@"osVersion"];
         [client setObject:@"com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)" forKey:@"userAgent"];
-    } else if ([clientName isEqualToString:YTMAndroidClientName]) {
+    } else if ([clientName isEqualToString:TuneTubeAndroidClientName]) {
         [client setObject:@30 forKey:@"androidSdkVersion"];
         [client setObject:@"Android" forKey:@"osName"];
         [client setObject:@"11" forKey:@"osVersion"];
@@ -652,7 +656,7 @@ static NSDictionary *YTMPlayerContext(NSString *clientName, NSString *clientVers
     return [NSDictionary dictionaryWithObject:client forKey:@"client"];
 }
 
-static NSURLRequest *YTMRequestForEndpoint(NSString *endpoint,
+static NSURLRequest *TuneTubeRequestForEndpoint(NSString *endpoint,
                                            NSString *origin,
                                            NSString *clientHeaderName,
                                            NSString *clientVersion,
@@ -662,7 +666,7 @@ static NSURLRequest *YTMRequestForEndpoint(NSString *endpoint,
                                            NSDictionary *body,
                                            NSError **error) {
     if (![apiKey length]) {
-        if (error) *error = YTMError(1, @"YouTube Music API key is empty");
+        if (error) *error = TuneTubeError(1, @"YouTube Music API key is empty");
         return nil;
     }
 
@@ -670,7 +674,7 @@ static NSURLRequest *YTMRequestForEndpoint(NSString *endpoint,
     NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"%@/%@?key=%@",
                                        endpoint, path, escapedKey]];
     if (!url) {
-        if (error) *error = YTMError(2, @"invalid YouTube Music endpoint");
+        if (error) *error = TuneTubeError(2, @"invalid YouTube Music endpoint");
         return nil;
     }
 
@@ -692,19 +696,19 @@ static NSURLRequest *YTMRequestForEndpoint(NSString *endpoint,
     return request;
 }
 
-static NSURLRequest *YTMRequest(NSString *path, NSString *apiKey, NSDictionary *body,
+static NSURLRequest *TuneTubeRequest(NSString *path, NSString *apiKey, NSDictionary *body,
                                 NSError **error) {
-    return YTMRequestForEndpoint(YTMEndpoint,
+    return TuneTubeRequestForEndpoint(TuneTubeEndpoint,
                                  @"https://music.youtube.com",
                                  @"67",
-                                 YTMClientVersion,
+                                 TuneTubeClientVersion,
                                  @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
                                  path, apiKey, body, error);
 }
 
-typedef void (^YTMNetworkCompletion)(NSData *data, NSError *error);
+typedef void (^TuneTubeNetworkCompletion)(NSData *data, NSError *error);
 
-static BOOL YTMShouldTryFallback(NSError *error) {
+static BOOL TuneTubeShouldTryFallback(NSError *error) {
     switch (error.code) {
         case NSURLErrorCannotFindHost:
         case NSURLErrorDNSLookupFailed:
@@ -720,31 +724,31 @@ static BOOL YTMShouldTryFallback(NSError *error) {
 }
 
 /* try the google endpoint when an older dns setup cannot resolve youtube */
-static void YTMSendRequest(NSURLRequest *request, NSURLRequest *fallback,
-                           YTMNetworkCompletion completion) {
+static void TuneTubeSendRequest(NSURLRequest *request, NSURLRequest *fallback,
+                           TuneTubeNetworkCompletion completion) {
     [NSURLConnection sendAsynchronousRequest:request
                                        queue:[NSOperationQueue mainQueue]
                            completionHandler:^(NSURLResponse *response, NSData *data, NSError *error) {
         (void)response;
-        if (error && fallback && YTMShouldTryFallback(error)) {
-            YTMSendRequest(fallback, nil, completion);
+        if (error && fallback && TuneTubeShouldTryFallback(error)) {
+            TuneTubeSendRequest(fallback, nil, completion);
             return;
         }
         completion(data, error);
     }];
 }
 
-static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError *error)) {
+static void TuneTubeDecodeResponse(NSData *data, void (^completion)(id root, NSError *error)) {
     NSError *error = nil;
     id root = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
     if (!root) {
-        completion(nil, error ? error : YTMError(3, @"invalid JSON response"));
+        completion(nil, error ? error : TuneTubeError(3, @"invalid JSON response"));
         return;
     }
     completion(root, nil);
 }
 
-@implementation YTMTrack
+@implementation TuneTubeTrack
 
 @synthesize videoID = _videoID;
 @synthesize title = _title;
@@ -811,7 +815,7 @@ static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError 
 
 @end
 
-@implementation YTMAPI
+@implementation TuneTubeAPI
 
 - (id)initWithAPIKey:(NSString *)apiKey {
     self = [super init];
@@ -820,34 +824,71 @@ static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError 
     return self;
 }
 
+- (void)durationForTrack:(TuneTubeTrack *)track completion:(TuneTubeDurationCompletion)completion {
+    if (!completion) return;
+    if (!track.videoID.length) {
+        completion(0, TuneTubeError(6, @"track has no video id"));
+        return;
+    }
+
+    NSString *iosUA = @"com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)";
+    NSString *androidUA = @"com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip";
+    NSString *vrUA = @"com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
+    TuneTubeDurationWithPlayerClient(track.videoID, _apiKey,
+                                     TuneTubeAndroidVRClientName, TuneTubeAndroidVRClientVersion,
+                                     @"28", vrUA, ^(NSUInteger duration, NSError *vrError) {
+        if (duration) {
+            completion(duration, nil);
+            return;
+        }
+        TuneTubeDurationWithPlayerClient(track.videoID, _apiKey,
+                                         TuneTubeIOSClientName, TuneTubeIOSClientVersion,
+                                         @"5", iosUA, ^(NSUInteger iosDuration, NSError *iosError) {
+            if (iosDuration) {
+                completion(iosDuration, nil);
+                return;
+            }
+            TuneTubeDurationWithPlayerClient(track.videoID, _apiKey,
+                                             TuneTubeAndroidClientName, TuneTubeAndroidClientVersion,
+                                             @"3", androidUA, ^(NSUInteger androidDuration,
+                                                               NSError *androidError) {
+                completion(androidDuration,
+                           androidDuration ? nil :
+                           (androidError ? androidError :
+                            (iosError ? iosError : vrError)));
+            });
+        });
+    });
+}
+
 - (void)dealloc {
     [_apiKey release];
     [super dealloc];
 }
 
-- (void)search:(NSString *)query completion:(YTMSearchCompletion)completion {
+- (void)search:(NSString *)query completion:(TuneTubeSearchCompletion)completion {
     if (!completion) return;
     if (![query length]) {
-        completion(nil, YTMError(4, @"search query is empty"));
+        completion(nil, TuneTubeError(4, @"search query is empty"));
         return;
     }
 
     NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
-                          YTMClientContext(), @"context",
+                          TuneTubeClientContext(), @"context",
                           query, @"query",
                           nil];
     NSError *error = nil;
-    NSURLRequest *request = YTMRequest(@"search", _apiKey, body, &error);
+    NSURLRequest *request = TuneTubeRequest(@"search", _apiKey, body, &error);
     NSError *fallbackError = nil;
-    NSURLRequest *fallbackRequest = YTMRequestForEndpoint(
-        YTMEndpointFallback, @"https://youtubei.googleapis.com", @"67",
-        YTMClientVersion,
+    NSURLRequest *fallbackRequest = TuneTubeRequestForEndpoint(
+        TuneTubeEndpointFallback, @"https://youtubei.googleapis.com", @"67",
+        TuneTubeClientVersion,
         @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
         @"search", _apiKey, body, &fallbackError);
     NSError *webFallbackError = nil;
-    NSURLRequest *webFallbackRequest = YTMRequestForEndpoint(
-        YTMEndpointWebFallback, @"https://www.youtube.com", @"67",
-        YTMClientVersion,
+    NSURLRequest *webFallbackRequest = TuneTubeRequestForEndpoint(
+        TuneTubeEndpointWebFallback, @"https://www.youtube.com", @"67",
+        TuneTubeClientVersion,
         @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
         @"search", _apiKey, body, &webFallbackError);
     if (!request) {
@@ -860,65 +901,65 @@ static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError 
             completion(nil, networkError);
             return;
         }
-        YTMDecodeResponse(data, ^(id root, NSError *jsonError) {
+        TuneTubeDecodeResponse(data, ^(id root, NSError *jsonError) {
             if (jsonError) {
                 completion(nil, jsonError);
                 return;
             }
             NSMutableArray *tracks = [NSMutableArray array];
-            YTMCollectTracks(root, tracks);
+            TuneTubeCollectTracks(root, tracks);
             if ([tracks count] == 0) {
-                completion(nil, YTMError(5, @"no playable music results in response"));
+                completion(nil, TuneTubeError(5, @"no playable music results in response"));
                 return;
             }
             completion(tracks, nil);
         });
     };
 
-    YTMSendRequest(request, fallbackRequest, ^(NSData *data, NSError *networkError) {
-        if (networkError && webFallbackRequest && YTMShouldTryFallback(networkError)) {
-            YTMSendRequest(webFallbackRequest, nil, finish);
+    TuneTubeSendRequest(request, fallbackRequest, ^(NSData *data, NSError *networkError) {
+        if (networkError && webFallbackRequest && TuneTubeShouldTryFallback(networkError)) {
+            TuneTubeSendRequest(webFallbackRequest, nil, finish);
             return;
         }
         finish(data, networkError);
     });
 }
 
-- (void)playlistTracksForID:(NSString *)playlistID completion:(YTMSearchCompletion)completion {
+- (void)playlistTracksForID:(NSString *)playlistID completion:(TuneTubeSearchCompletion)completion {
     if (!completion) return;
     if (!playlistID.length) {
-        completion(nil, YTMError(13, @"playlist has no id"));
+        completion(nil, TuneTubeError(13, @"playlist has no id"));
         return;
     }
     NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
-                          YTMClientContext(), @"context",
+                          TuneTubeClientContext(), @"context",
                           playlistID, @"browseId", nil];
     NSError *error = nil;
-    NSURLRequest *request = YTMRequest(@"browse", _apiKey, body, &error);
+    NSURLRequest *request = TuneTubeRequest(@"browse", _apiKey, body, &error);
     NSError *fallbackError = nil;
-    NSURLRequest *fallback = YTMRequestForEndpoint(
-        YTMEndpointFallback, @"https://youtubei.googleapis.com", @"67",
-        YTMClientVersion,
+    NSURLRequest *fallback = TuneTubeRequestForEndpoint(
+        TuneTubeEndpointFallback, @"https://youtubei.googleapis.com", @"67",
+        TuneTubeClientVersion,
         @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
         @"browse", _apiKey, body, &fallbackError);
     if (!request) {
         completion(nil, error);
         return;
     }
-    YTMSendRequest(request, fallback, ^(NSData *data, NSError *networkError) {
+    TuneTubeSendRequest(request, fallback, ^(NSData *data, NSError *networkError) {
         if (networkError) {
             completion(nil, networkError);
             return;
         }
-        YTMDecodeResponse(data, ^(id root, NSError *jsonError) {
+        TuneTubeDecodeResponse(data, ^(id root, NSError *jsonError) {
             if (jsonError) {
                 completion(nil, jsonError);
                 return;
             }
             NSMutableArray *tracks = [NSMutableArray array];
-            YTMCollectTracks(root, tracks);
+            TuneTubeCollectTracks(root, tracks);
             if (!tracks.count) {
-                completion(nil, YTMError(14, @"playlist has no playable tracks"));
+                completion(nil, TuneTubeError(14, @"playlist has no playable tracks"));
                 return;
             }
             completion(tracks, nil);
@@ -926,48 +967,48 @@ static void YTMDecodeResponse(NSData *data, void (^completion)(id root, NSError 
     });
 }
 
-- (void)artistInfoForID:(NSString *)artistID completion:(YTMArtistCompletion)completion {
+- (void)artistInfoForID:(NSString *)artistID completion:(TuneTubeArtistCompletion)completion {
     if (!completion) return;
     if (!artistID.length) {
-        completion(nil, nil, YTMError(15, @"artist has no id"));
+        completion(nil, nil, TuneTubeError(15, @"artist has no id"));
         return;
     }
     NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
-                          YTMClientContext(), @"context",
+                          TuneTubeClientContext(), @"context",
                           artistID, @"browseId", nil];
     NSError *error = nil;
-    NSURLRequest *request = YTMRequest(@"browse", _apiKey, body, &error);
+    NSURLRequest *request = TuneTubeRequest(@"browse", _apiKey, body, &error);
     NSError *fallbackError = nil;
-    NSURLRequest *fallback = YTMRequestForEndpoint(
-        YTMEndpointFallback, @"https://youtubei.googleapis.com", @"67",
-        YTMClientVersion,
+    NSURLRequest *fallback = TuneTubeRequestForEndpoint(
+        TuneTubeEndpointFallback, @"https://youtubei.googleapis.com", @"67",
+        TuneTubeClientVersion,
         @"Mozilla/5.0 (iPhone; CPU iOS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
         @"browse", _apiKey, body, &fallbackError);
     if (!request) {
         completion(nil, nil, error);
         return;
     }
-    YTMSendRequest(request, fallback, ^(NSData *data, NSError *networkError) {
+    TuneTubeSendRequest(request, fallback, ^(NSData *data, NSError *networkError) {
         if (networkError) {
             completion(nil, nil, networkError);
             return;
         }
-        YTMDecodeResponse(data, ^(id root, NSError *jsonError) {
+        TuneTubeDecodeResponse(data, ^(id root, NSError *jsonError) {
             if (jsonError) {
                 completion(nil, nil, jsonError);
                 return;
             }
-            NSString *name = YTMFindTextForKey(root, @"title");
+            NSString *name = TuneTubeFindTextForKey(root, @"title");
             // prefer true channel avatar urls over album art
-            NSString *avatar = YTMBestAvatarThumbnail(root);
-            if (!avatar.length) avatar = YTMHeaderThumbnail(root);
-            if (!avatar.length) avatar = YTMThumbnail(root);
+            NSString *avatar = TuneTubeBestAvatarThumbnail(root);
+            if (!avatar.length) avatar = TuneTubeHeaderThumbnail(root);
+            if (!avatar.length) avatar = TuneTubeThumbnail(root);
             completion(name, avatar, nil);
         });
     });
 }
 
-static NSURL *YTMDirectAudioURL(id root, BOOL *ciphered) {
+static NSURL *TuneTubeDirectAudioURL(id root, BOOL *ciphered) {
     NSDictionary *streaming = [root isKindOfClass:[NSDictionary class]]
         ? [(NSDictionary *)root objectForKey:@"streamingData"] : nil;
     if (![streaming isKindOfClass:[NSDictionary class]]) return nil;
@@ -981,13 +1022,17 @@ static NSURL *YTMDirectAudioURL(id root, BOOL *ciphered) {
     for (NSArray *formats in lists) {
         if (![formats isKindOfClass:[NSArray class]]) continue;
         for (NSDictionary *format in formats) {
-            NSString *mime = YTMString([format objectForKey:@"mimeType"]);
+            NSString *mime = TuneTubeString([format objectForKey:@"mimeType"]);
             BOOL audioOnly = [mime hasPrefix:@"audio/"];
+            BOOL iOSAudio = [mime rangeOfString:@"audio/mp4"
+                                         options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                [mime rangeOfString:@"mp4a."
+                             options:NSCaseInsensitiveSearch].location != NSNotFound;
             BOOL combinedMP4 = listIndex == 1 &&
                 [mime hasPrefix:@"video/"] &&
                 [mime rangeOfString:@"mp4a."].location != NSNotFound;
-            if (!audioOnly && !combinedMP4) continue;
-            NSString *url = YTMString([format objectForKey:@"url"]);
+            if ((!audioOnly || !iOSAudio) && !combinedMP4) continue;
+            NSString *url = TuneTubeString([format objectForKey:@"url"]);
             if (!url) {
                 if ([format objectForKey:@"signatureCipher"] || [format objectForKey:@"cipher"])
                     *ciphered = YES;
@@ -1004,27 +1049,89 @@ static NSURL *YTMDirectAudioURL(id root, BOOL *ciphered) {
         ++listIndex;
     }
     if (!best) best = combined;
-    if (best) return [NSURL URLWithString:YTMString([best objectForKey:@"url"])];
+    if (best) return [NSURL URLWithString:TuneTubeString([best objectForKey:@"url"])];
 
     /* accept hls because ios may return a manifest instead of adaptive formats */
-    return [NSURL URLWithString:YTMString([streaming objectForKey:@"hlsManifestUrl"])];
+    return [NSURL URLWithString:TuneTubeString([streaming objectForKey:@"hlsManifestUrl"])];
 }
 
-static void YTMAudioURLWithPlayerClient(NSString *videoID,
-                                        NSString *apiKey,
-                                        NSString *clientName,
-                                        NSString *clientVersion,
-                                        NSString *clientHeaderName,
-                                        NSString *userAgent,
-                                        YTMAudioCompletion completion) {
+static void TuneTubeDurationWithPlayerClient(NSString *videoID,
+                                              NSString *apiKey,
+                                              NSString *clientName,
+                                              NSString *clientVersion,
+                                              NSString *clientHeaderName,
+                                              NSString *userAgent,
+                                              TuneTubeDurationCompletion completion) {
     NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
-                          YTMPlayerContext(clientName, clientVersion), @"context",
+                          TuneTubePlayerContext(clientName, clientVersion), @"context",
                           videoID, @"videoId",
                           @YES, @"contentCheckOk",
                           @YES, @"racyCheckOk",
                           nil];
     NSError *error = nil;
-    NSURLRequest *request = YTMRequestForEndpoint(YTMPlayerEndpoint,
+    NSURLRequest *request = TuneTubeRequestForEndpoint(TuneTubePlayerEndpoint,
+                                                       @"https://www.youtube.com",
+                                                       clientHeaderName,
+                                                       clientVersion,
+                                                       userAgent,
+                                                       @"player",
+                                                       apiKey,
+                                                       body,
+                                                       &error);
+    NSError *fallbackError = nil;
+    NSURLRequest *fallbackRequest = TuneTubeRequestForEndpoint(
+        TuneTubePlayerEndpointFallback, @"https://youtubei.googleapis.com",
+        clientHeaderName, clientVersion, userAgent, @"player", apiKey, body,
+        &fallbackError);
+    if (!request) {
+        completion(0, error);
+        return;
+    }
+
+    TuneTubeSendRequest(request, fallbackRequest, ^(NSData *data, NSError *networkError) {
+        if (networkError) {
+            completion(0, networkError);
+            return;
+        }
+        TuneTubeDecodeResponse(data, ^(id root, NSError *jsonError) {
+            if (jsonError) {
+                completion(0, jsonError);
+                return;
+            }
+            NSDictionary *details = [root isKindOfClass:[NSDictionary class]]
+                ? [(NSDictionary *)root objectForKey:@"videoDetails"] : nil;
+            NSString *length = TuneTubeString([details objectForKey:@"lengthSeconds"]);
+            NSUInteger duration = (NSUInteger)[length integerValue];
+            if (!duration) {
+                NSDictionary *microformat = [root isKindOfClass:[NSDictionary class]]
+                    ? [(NSDictionary *)root objectForKey:@"microformat"] : nil;
+                NSDictionary *renderer = [microformat objectForKey:@"playerMicroformatRenderer"];
+                duration = (NSUInteger)[TuneTubeString([renderer objectForKey:@"lengthSeconds"]) integerValue];
+            }
+            if (duration) {
+                completion(duration, nil);
+            } else {
+                completion(0, TuneTubeError(16, @"track duration is missing"));
+            }
+        });
+    });
+}
+
+static void TuneTubeAudioURLWithPlayerClient(NSString *videoID,
+                                        NSString *apiKey,
+                                        NSString *clientName,
+                                        NSString *clientVersion,
+                                        NSString *clientHeaderName,
+                                        NSString *userAgent,
+                                        TuneTubeAudioCompletion completion) {
+    NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
+                          TuneTubePlayerContext(clientName, clientVersion), @"context",
+                          videoID, @"videoId",
+                          @YES, @"contentCheckOk",
+                          @YES, @"racyCheckOk",
+                          nil];
+    NSError *error = nil;
+    NSURLRequest *request = TuneTubeRequestForEndpoint(TuneTubePlayerEndpoint,
                                                    @"https://www.youtube.com",
                                                    clientHeaderName,
                                                    clientVersion,
@@ -1034,8 +1141,8 @@ static void YTMAudioURLWithPlayerClient(NSString *videoID,
                                                    body,
                                                    &error);
     NSError *fallbackError = nil;
-    NSURLRequest *fallbackRequest = YTMRequestForEndpoint(
-        YTMPlayerEndpointFallback, @"https://youtubei.googleapis.com",
+    NSURLRequest *fallbackRequest = TuneTubeRequestForEndpoint(
+        TuneTubePlayerEndpointFallback, @"https://youtubei.googleapis.com",
         clientHeaderName, clientVersion, userAgent, @"player", apiKey, body,
         &fallbackError);
     if (!request) {
@@ -1043,19 +1150,19 @@ static void YTMAudioURLWithPlayerClient(NSString *videoID,
         return;
     }
 
-    YTMSendRequest(request, fallbackRequest, ^(NSData *data, NSError *networkError) {
+    TuneTubeSendRequest(request, fallbackRequest, ^(NSData *data, NSError *networkError) {
         if (networkError) {
             completion(nil, networkError);
             return;
         }
-        YTMDecodeResponse(data, ^(id root, NSError *jsonError) {
+        TuneTubeDecodeResponse(data, ^(id root, NSError *jsonError) {
             BOOL ciphered = NO;
             NSURL *url;
             if (jsonError) {
                 completion(nil, jsonError);
                 return;
             }
-            url = YTMDirectAudioURL(root, &ciphered);
+            url = TuneTubeDirectAudioURL(root, &ciphered);
             if (url) {
                 completion(url, nil);
                 return;
@@ -1063,49 +1170,58 @@ static void YTMAudioURLWithPlayerClient(NSString *videoID,
 
             NSDictionary *playability = [root isKindOfClass:[NSDictionary class]]
                 ? [(NSDictionary *)root objectForKey:@"playabilityStatus"] : nil;
-            NSString *reason = YTMString([playability objectForKey:@"reason"]);
+            NSString *reason = TuneTubeString([playability objectForKey:@"reason"]);
             if ([reason length]) {
-                completion(nil, YTMError(8, [NSString stringWithFormat:@"%@ player: %@", clientName, reason]));
+                completion(nil, TuneTubeError(8, [NSString stringWithFormat:@"%@ player: %@", clientName, reason]));
             } else if (ciphered) {
-                completion(nil, YTMError(7, @"audio format is ciphered; decipher support is not enabled yet"));
+                completion(nil, TuneTubeError(7, @"audio format is ciphered; decipher support is not enabled yet"));
             } else {
-                completion(nil, YTMError(8, [NSString stringWithFormat:@"%@ player response has no audio format", clientName]));
+                completion(nil, TuneTubeError(8, [NSString stringWithFormat:@"%@ player response has no audio format", clientName]));
             }
         });
     });
 }
 
-- (void)audioURLForTrack:(YTMTrack *)track completion:(YTMAudioCompletion)completion {
+- (void)audioURLForTrack:(TuneTubeTrack *)track completion:(TuneTubeAudioCompletion)completion {
     if (!completion) return;
     if (![track.videoID length]) {
-        completion(nil, YTMError(6, @"track has no video id"));
+        completion(nil, TuneTubeError(6, @"track has no video id"));
         return;
     }
 
     NSString *iosUA = @"com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)";
     NSString *androidUA = @"com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip";
     NSString *vrUA = @"com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
-    YTMAudioURLWithPlayerClient(track.videoID, _apiKey,
-                                YTMIOSClientName, YTMIOSClientVersion, @"5", iosUA,
+    TuneTubeAudioURLWithPlayerClient(track.videoID, _apiKey,
+                                TuneTubeAndroidVRClientName, TuneTubeAndroidVRClientVersion, @"28", vrUA,
+                                ^(NSURL *vrURL, NSError *vrError) {
+        if (vrURL) {
+            completion(vrURL, nil);
+            return;
+        }
+        TuneTubeAudioURLWithPlayerClient(track.videoID, _apiKey,
+                                TuneTubeIOSClientName, TuneTubeIOSClientVersion, @"5", iosUA,
                                 ^(NSURL *url, NSError *iosError) {
         if (url) {
             completion(url, nil);
             return;
         }
-        YTMAudioURLWithPlayerClient(track.videoID, _apiKey,
-                                    YTMAndroidClientName, YTMAndroidClientVersion, @"3", androidUA,
+        TuneTubeAudioURLWithPlayerClient(track.videoID, _apiKey,
+                                    TuneTubeAndroidClientName, TuneTubeAndroidClientVersion, @"3", androidUA,
                                     ^(NSURL *androidURL, NSError *androidError) {
             if (androidURL) {
                 completion(androidURL, nil);
                 return;
             }
-            YTMAudioURLWithPlayerClient(track.videoID, _apiKey,
-                                        YTMAndroidVRClientName, YTMAndroidVRClientVersion, @"28", vrUA,
+            TuneTubeAudioURLWithPlayerClient(track.videoID, _apiKey,
+                                        TuneTubeAndroidVRClientName, TuneTubeAndroidVRClientVersion, @"28", vrUA,
                                         ^(NSURL *fallbackURL, NSError *fallbackError) {
                 completion(fallbackURL, fallbackURL ? nil :
                            (fallbackError ? fallbackError :
-                            (androidError ? androidError : iosError)));
+                            (androidError ? androidError :
+                             (iosError ? iosError : vrError))));
             });
+        });
         });
     });
 }

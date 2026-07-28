@@ -14,8 +14,8 @@ Set the toolchain and sdk paths before building:
 
 ```bash
 export THEOS=/path/to/theos
-export YTM_SDK_V7=/path/to/iPhoneOS6.1.sdk
-export YTM_SDK_V64=/path/to/iPhoneOS16.5.sdk
+export TUNETUBE_SDK_V7=/path/to/iPhoneOS6.1.sdk
+export TUNETUBE_SDK_V64=/path/to/iPhoneOS16.5.sdk
 ```
 
 ## build

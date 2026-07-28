@@ -5,29 +5,32 @@
 #import "tunetube_image_cache.h"
 #import "tunetube_theme.h"
 #import "tunetube_l10n.h"
-#import "ytm_api.h"
-#import "ytm_player.h"
+#import "tunetube_api.h"
+#import "tunetube_player.h"
 #import "library_vc.h"
 
 static NSString * const TuneTubePlaylistsKey = @"TuneTubePlaylists";
 
-static NSDictionary *TunePlaylistEntry(YTMTrack *track) {
+static NSDictionary *TunePlaylistEntry(TuneTubeTrack *track) {
     if (!track.videoID.length) return nil;
     return [NSDictionary dictionaryWithObjectsAndKeys:
             track.videoID, @"id",
             track.title ?: @"Untitled", @"title",
-            YTMDisplayArtist(track.artist), @"artist",
+            TuneTubeTrackArtistText(track), @"artist",
             track.album ?: @"", @"album",
             track.thumbnailURL ?: @"", @"thumbnail",
             [NSNumber numberWithUnsignedInteger:track.duration], @"duration", nil];
 }
 
-static YTMTrack *TuneTrackFromEntry(NSDictionary *entry) {
+static TuneTubeTrack *TuneTrackFromEntry(NSDictionary *entry) {
     NSString *videoID = [entry objectForKey:@"id"];
     if (!videoID.length) return nil;
-    return [[[YTMTrack alloc] initWithVideoID:videoID
+    NSString *artist = TuneTubeDisplayArtist([entry objectForKey:@"artist"]);
+    if ([artist caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame)
+        artist = @"Various Artists";
+    return [[[TuneTubeTrack alloc] initWithVideoID:videoID
                                         title:[entry objectForKey:@"title"] ?: @"Untitled"
-                                       artist:YTMDisplayArtist([entry objectForKey:@"artist"])
+                                       artist:artist
                                         album:[entry objectForKey:@"album"] ?: @""
                                 thumbnailURL:[entry objectForKey:@"thumbnail"] ?: @""
                                      duration:[[entry objectForKey:@"duration"] unsignedIntegerValue]]
@@ -69,7 +72,7 @@ void TuneTubeCreatePlaylist(NSString *name) {
     TuneWritePlaylistRecords(records);
 }
 
-void TuneTubeAddTrackToPlaylist(YTMTrack *track, NSString *name) {
+void TuneTubeAddTrackToPlaylist(TuneTubeTrack *track, NSString *name) {
     NSDictionary *entry = TunePlaylistEntry(track);
     if (!entry || !name.length) return;
     NSMutableArray *records = TunePlaylistRecords();
@@ -95,6 +98,45 @@ void TuneTubeAddTrackToPlaylist(YTMTrack *track, NSString *name) {
     }
 }
 
+NSArray *TuneTubePlaylistsContainingTrack(TuneTubeTrack *track) {
+    NSMutableArray *names = [NSMutableArray array];
+    if (!track.videoID.length) return names;
+    for (NSDictionary *record in TunePlaylistRecords()) {
+        NSString *name = [record objectForKey:@"name"];
+        for (NSDictionary *entry in [record objectForKey:@"tracks"]) {
+            if ([[entry objectForKey:@"id"] isEqualToString:track.videoID]) {
+                if (name.length) [names addObject:name];
+                break;
+            }
+        }
+    }
+    return names;
+}
+
+void TuneTubeRemoveTrackFromPlaylist(TuneTubeTrack *track, NSString *name) {
+    if (!track.videoID.length || !name.length) return;
+    NSMutableArray *records = TunePlaylistRecords();
+    for (NSUInteger index = 0; index < records.count; ++index) {
+        NSMutableDictionary *record = [[records objectAtIndex:index] mutableCopy];
+        if ([[record objectForKey:@"name"] caseInsensitiveCompare:name] != NSOrderedSame) {
+            [record release];
+            continue;
+        }
+        NSMutableArray *tracks = [NSMutableArray arrayWithArray:
+                                  [record objectForKey:@"tracks"] ?: [NSArray array]];
+        for (NSInteger trackIndex = (NSInteger)tracks.count - 1; trackIndex >= 0; --trackIndex) {
+            NSDictionary *entry = [tracks objectAtIndex:(NSUInteger)trackIndex];
+            if ([[entry objectForKey:@"id"] isEqualToString:track.videoID])
+                [tracks removeObjectAtIndex:(NSUInteger)trackIndex];
+        }
+        [record setObject:tracks forKey:@"tracks"];
+        [records replaceObjectAtIndex:index withObject:record];
+        [record release];
+        TuneWritePlaylistRecords(records);
+        return;
+    }
+}
+
 NSArray *TuneTubeTracksForPlaylist(NSString *name) {
     for (NSDictionary *record in TunePlaylistRecords()) {
         if ([[record objectForKey:@"name"] caseInsensitiveCompare:name] != NSOrderedSame)
@@ -102,7 +144,7 @@ NSArray *TuneTubeTracksForPlaylist(NSString *name) {
         NSMutableArray *tracks = [NSMutableArray array];
         for (NSDictionary *entry in [record objectForKey:@"tracks"])
             if ([entry isKindOfClass:[NSDictionary class]]) {
-                YTMTrack *track = TuneTrackFromEntry(entry);
+                TuneTubeTrack *track = TuneTrackFromEntry(entry);
                 if (track) [tracks addObject:track];
             }
         return tracks;
@@ -184,7 +226,7 @@ NSArray *TuneTubeTracksForPlaylist(NSString *name) {
     UILabel *_artistLabel;
     NSString *_imageURL;
 }
-- (void)configureWithTrack:(YTMTrack *)track;
+- (void)configureWithTrack:(TuneTubeTrack *)track;
 @end
 
 @implementation TunePlaylistTrackCell
@@ -239,12 +281,12 @@ NSArray *TuneTubeTracksForPlaylist(NSString *name) {
     _artistLabel.text = nil;
 }
 
-- (void)configureWithTrack:(YTMTrack *)track {
+- (void)configureWithTrack:(TuneTubeTrack *)track {
     [_imageURL release];
     _imageURL = [track.thumbnailURL copy];
     _artwork.image = [UIImage imageNamed:@"Icon.png"];
     _titleLabel.text = track.title;
-    _artistLabel.text = YTMDisplayArtist(track.artist);
+    _artistLabel.text = TuneTubeTrackArtistText(track);
     _card.layer.borderColor = TuneThemeBorder().CGColor;
     _gradient.colors = [NSArray arrayWithObjects:
                         (id)TuneThemeSurfaceTop().CGColor,
@@ -281,7 +323,7 @@ NSArray *TuneTubeTracksForPlaylist(NSString *name) {
 
 @implementation TunePlaylistsVC
 
-- (id)initWithPlayer:(YTMPlayer *)player api:(YTMAPI *)api {
+- (id)initWithPlayer:(TuneTubePlayer *)player api:(TuneTubeAPI *)api {
     self = [super init];
     if (self) {
         _player = [player retain];
@@ -415,7 +457,7 @@ NSArray *TuneTubeTracksForPlaylist(NSString *name) {
 
 @implementation TunePlaylistVC
 
-- (id)initWithName:(NSString *)name player:(YTMPlayer *)player api:(YTMAPI *)api {
+- (id)initWithName:(NSString *)name player:(TuneTubePlayer *)player api:(TuneTubeAPI *)api {
     self = [super init];
     if (self) {
         _playlistName = [name copy];
@@ -515,7 +557,7 @@ NSArray *TuneTubeTracksForPlaylist(NSString *name) {
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if ((NSUInteger)indexPath.row >= _tracks.count || !_player || !_api) return;
-    YTMTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
+    TuneTubeTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
     [_player setQueue:_tracks selectedIndex:indexPath.row usingAPI:_api];
     TuneTubeRecordTrack(track);
     [self.navigationController popViewControllerAnimated:YES];

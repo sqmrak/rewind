@@ -6,17 +6,17 @@
 #import "tunetube_image_cache.h"
 #import "tunetube_theme.h"
 #import "tunetube_l10n.h"
-#import "ytm_api.h"
-#import "ytm_player.h"
+#import "tunetube_api.h"
+#import "tunetube_player.h"
 #import "artist_vc.h"
 #import "playlist_vc.h"
 
-static NSDictionary *TuneTubeDictionaryForTrack(YTMTrack *track) {
+static NSDictionary *TuneTubeDictionaryForTrack(TuneTubeTrack *track) {
     if (!track.videoID.length) return nil;
     return [NSDictionary dictionaryWithObjectsAndKeys:
             track.videoID, @"id",
             track.title ?: @"", @"title",
-            YTMDisplayArtist(track.artist), @"artist",
+            TuneTubeTrackArtistText(track), @"artist",
             track.album ?: @"", @"album",
             track.thumbnailURL ?: @"", @"thumbnail",
             [NSNumber numberWithUnsignedInteger:track.duration], @"duration", nil];
@@ -30,12 +30,15 @@ static NSArray *TuneTubeTracksFromEntries(NSArray *saved) {
         if (!videoID.length) continue;
         NSString *savedArtist = [entry objectForKey:@"artist"];
         NSString *savedAlbum = [entry objectForKey:@"album"] ?: @"";
-        if ([savedArtist caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame)
+        NSString *artist = TuneTubeDisplayArtist(savedArtist);
+        if ([artist caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame) {
+            artist = @"Various Artists";
             savedAlbum = @"";
-        YTMTrack *track = [[[YTMTrack alloc]
+        }
+        TuneTubeTrack *track = [[[TuneTubeTrack alloc]
                             initWithVideoID:videoID
                             title:[entry objectForKey:@"title"] ?: @"Untitled"
-                            artist:YTMDisplayArtist(savedArtist)
+                            artist:artist
                             album:savedAlbum
                             thumbnailURL:[entry objectForKey:@"thumbnail"] ?: @""
                             duration:[[entry objectForKey:@"duration"] unsignedIntegerValue]] autorelease];
@@ -65,7 +68,7 @@ NSArray *TuneTubeRecentTracks(void) {
                                       objectForKey:TUNETUBE_HISTORY_DEFAULTS_KEY]);
 }
 
-static void TuneTubeInsertTrack(YTMTrack *track, NSString *key, NSUInteger limit) {
+static void TuneTubeInsertTrack(TuneTubeTrack *track, NSString *key, NSUInteger limit) {
     NSDictionary *entry = TuneTubeDictionaryForTrack(track);
     if (!entry) return;
 
@@ -85,15 +88,15 @@ static void TuneTubeInsertTrack(YTMTrack *track, NSString *key, NSUInteger limit
     TuneTubeWriteEntries(saved, key);
 }
 
-void TuneTubeSaveTrack(YTMTrack *track) {
+void TuneTubeSaveTrack(TuneTubeTrack *track) {
     TuneTubeInsertTrack(track, TUNETUBE_LIBRARY_DEFAULTS_KEY, 200);
 }
 
-void TuneTubeRecordTrack(YTMTrack *track) {
+void TuneTubeRecordTrack(TuneTubeTrack *track) {
     TuneTubeInsertTrack(track, TUNETUBE_HISTORY_DEFAULTS_KEY, 12);
 }
 
-BOOL TuneTubeTrackIsSaved(YTMTrack *track) {
+BOOL TuneTubeTrackIsSaved(TuneTubeTrack *track) {
     if (!track.videoID.length) return NO;
     for (NSDictionary *entry in TuneTubeEntriesForKey(TUNETUBE_LIBRARY_DEFAULTS_KEY)) {
         if ([[entry objectForKey:@"id"] isEqualToString:track.videoID]) return YES;
@@ -101,7 +104,7 @@ BOOL TuneTubeTrackIsSaved(YTMTrack *track) {
     return NO;
 }
 
-void TuneTubeRemoveTrack(YTMTrack *track) {
+void TuneTubeRemoveTrack(TuneTubeTrack *track) {
     if (!track.videoID.length) return;
     NSMutableArray *saved = TuneTubeEntriesForKey(TUNETUBE_LIBRARY_DEFAULTS_KEY);
     for (NSInteger index = (NSInteger)saved.count - 1; index >= 0; --index) {
@@ -112,7 +115,7 @@ void TuneTubeRemoveTrack(YTMTrack *track) {
     TuneTubeWriteEntries(saved, TUNETUBE_LIBRARY_DEFAULTS_KEY);
 }
 
-static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
+static NSString *TuneTubeLibraryThumbnailURL(TuneTubeTrack *track) {
     NSString *url = track.thumbnailURL;
     if (url.length) {
         if ([url hasPrefix:@"//"])
@@ -131,12 +134,12 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     UILabel *_titleLabel;
     UILabel *_artistLabel;
     NSString *_imageURL;
-    YTMTrack *_track;
+    TuneTubeTrack *_track;
     id<TuneArtistTrackCellDelegate> _artistDelegate;
     UIButton *_artistButton;
 }
 - (void)setArtistDelegate:(id<TuneArtistTrackCellDelegate>)delegate;
-- (void)configureWithTrack:(YTMTrack *)track;
+- (void)configureWithTrack:(TuneTubeTrack *)track;
 @end
 
 @implementation TuneLibraryCell
@@ -228,7 +231,7 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     _artistDelegate = delegate;
 }
 
-- (void)configureWithTrack:(YTMTrack *)track {
+- (void)configureWithTrack:(TuneTubeTrack *)track {
     [self applyTheme];
     [_track release];
     _track = [track retain];
@@ -236,9 +239,7 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     _imageURL = [TuneTubeLibraryThumbnailURL(track) copy];
     _artwork.image = [UIImage imageNamed:@"Icon.png"];
     _titleLabel.text = track.title;
-    NSString *artistName = YTMDisplayArtist(track.artist);
-    if ([artistName caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame)
-        artistName = TuneL(@"unknown_artist");
+    NSString *artistName = TuneTubeTrackArtistText(track);
     _artistLabel.text = artistName;
     if (track.album.length)
         _artistLabel.text = [NSString stringWithFormat:@"%@  ·  %@", artistName, track.album];
@@ -283,12 +284,12 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
 - (void)reloadLibrary;
 - (void)applyTheme:(NSNotification *)note;
 - (void)findMusicPressed;
-- (void)tuneArtistCell:(id)cell didSelectTrack:(YTMTrack *)track;
+- (void)tuneArtistCell:(id)cell didSelectTrack:(TuneTubeTrack *)track;
 @end
 
 @implementation TuneLibraryVC
 
-- (id)initWithPlayer:(YTMPlayer *)player api:(YTMAPI *)api {
+- (id)initWithPlayer:(TuneTubePlayer *)player api:(TuneTubeAPI *)api {
     self = [super init];
     if (self) {
         _player = [player retain];
@@ -466,22 +467,22 @@ static NSString *TuneTubeLibraryThumbnailURL(YTMTrack *track) {
     if (!cell)
         cell = [[[TuneLibraryCell alloc] initWithStyle:UITableViewCellStyleDefault
                                       reuseIdentifier:cellID] autorelease];
-    YTMTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
+    TuneTubeTrack *track = [_tracks objectAtIndex:(NSUInteger)indexPath.row];
     [cell setArtistDelegate:self];
     [cell configureWithTrack:track];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     return cell;
 }
 
-- (void)tuneArtistCell:(id)cell didSelectTrack:(YTMTrack *)track {
+- (void)tuneArtistCell:(id)cell didSelectTrack:(TuneTubeTrack *)track {
     (void)cell;
     TunePushArtistProfile(self, track, _api, _player);
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     NSUInteger row;
-    YTMTrack *track;
-    YTMAPI *api;
+    TuneTubeTrack *track;
+    TuneTubeAPI *api;
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     row = (NSUInteger)indexPath.row;
     if (row >= _tracks.count || !_player || !_api) return;

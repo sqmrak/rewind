@@ -6,7 +6,7 @@
 #import "tunetube_config.h"
 #import "tunetube_theme.h"
 #import "tunetube_l10n.h"
-#import "ytm_api.h"
+#import "tunetube_api.h"
 
 @interface TuneSettingsChromeView : UIView {
     CAGradientLayer *_gradient;

@@ -1,15 +1,15 @@
-#ifndef YTM_API_H
-#define YTM_API_H
+#ifndef TUNETUBE_API_H
+#define TUNETUBE_API_H
 
 #import <Foundation/Foundation.h>
 
 /* keep a fallback for fresh installs; settings can replace it */
-FOUNDATION_EXPORT NSString * const YTMDefaultAPIKey;
-FOUNDATION_EXPORT NSString *YTMDisplayArtist(NSString *artist);
-@class YTMTrack;
-FOUNDATION_EXPORT NSString *YTMTrackArtistText(YTMTrack *track);
+FOUNDATION_EXPORT NSString * const TuneTubeDefaultAPIKey;
+FOUNDATION_EXPORT NSString *TuneTubeDisplayArtist(NSString *artist);
+@class TuneTubeTrack;
+FOUNDATION_EXPORT NSString *TuneTubeTrackArtistText(TuneTubeTrack *track);
 
-@interface YTMTrack : NSObject {
+@interface TuneTubeTrack : NSObject {
     NSString *_videoID;
     NSString *_title;
     NSString *_artist;
@@ -50,20 +50,22 @@ FOUNDATION_EXPORT NSString *YTMTrackArtistText(YTMTrack *track);
 
 @end
 
-typedef void (^YTMSearchCompletion)(NSArray *tracks, NSError *error);
-typedef void (^YTMAudioCompletion)(NSURL *url, NSError *error);
-typedef void (^YTMArtistCompletion)(NSString *artist, NSString *avatarURL, NSError *error);
+typedef void (^TuneTubeSearchCompletion)(NSArray *tracks, NSError *error);
+typedef void (^TuneTubeAudioCompletion)(NSURL *url, NSError *error);
+typedef void (^TuneTubeDurationCompletion)(NSUInteger duration, NSError *error);
+typedef void (^TuneTubeArtistCompletion)(NSString *artist, NSString *avatarURL, NSError *error);
 
-@interface YTMAPI : NSObject {
+@interface TuneTubeAPI : NSObject {
     NSString *_apiKey;
 }
 
 - (id)initWithAPIKey:(NSString *)apiKey;
-- (void)search:(NSString *)query completion:(YTMSearchCompletion)completion;
-- (void)audioURLForTrack:(YTMTrack *)track completion:(YTMAudioCompletion)completion;
-- (void)playlistTracksForID:(NSString *)playlistID completion:(YTMSearchCompletion)completion;
-- (void)artistInfoForID:(NSString *)artistID completion:(YTMArtistCompletion)completion;
+- (void)search:(NSString *)query completion:(TuneTubeSearchCompletion)completion;
+- (void)durationForTrack:(TuneTubeTrack *)track completion:(TuneTubeDurationCompletion)completion;
+- (void)audioURLForTrack:(TuneTubeTrack *)track completion:(TuneTubeAudioCompletion)completion;
+- (void)playlistTracksForID:(NSString *)playlistID completion:(TuneTubeSearchCompletion)completion;
+- (void)artistInfoForID:(NSString *)artistID completion:(TuneTubeArtistCompletion)completion;
 
 @end
 
-#endif /* ytm_api_h */
+#endif /* tunetube_api_h */

@@ -1,18 +1,17 @@
-#import "ytm_player.h"
+#import "tunetube_player.h"
 
 #import <dispatch/dispatch.h>
 #import <AVFoundation/AVFoundation.h>
 #import <MediaPlayer/MediaPlayer.h>
 #import <UIKit/UIKit.h>
-#import "ytm_api.h"
+#import "tunetube_api.h"
 #import "tunetube_image_cache.h"
 #import "tunetube_config.h"
 
 #include <math.h>
 
-NSString * const YTMPlayerDidChangeNotification = @"YTMPlayerDidChangeNotification";
-static NSString * const YTMPlaybackAudioCategory = @"AVAudioSessionCategoryPlayback";
-static NSString * const YTMAmbientAudioCategory = @"AVAudioSessionCategoryAmbient";
+NSString * const TuneTubePlayerDidChangeNotification = @"TuneTubePlayerDidChangeNotification";
+static NSString * const TuneTubePlaybackAudioCategory = @"AVAudioSessionCategoryPlayback";
 
 /* the ios 6 headers do not declare the initializer added in ios 10 */
 @interface MPMediaItemArtwork (TuneTubeIOS10)
@@ -20,7 +19,7 @@ static NSString * const YTMAmbientAudioCategory = @"AVAudioSessionCategoryAmbien
           requestHandler:(UIImage *(^)(CGSize size))handler;
 @end
 
-static MPMediaItemArtwork *YTMArtworkForImage(UIImage *image) {
+static MPMediaItemArtwork *TuneTubeArtworkForImage(UIImage *image) {
     if (!image || ![MPMediaItemArtwork class]) return nil;
 
     if ([MPMediaItemArtwork instancesRespondToSelector:
@@ -36,28 +35,22 @@ static MPMediaItemArtwork *YTMArtworkForImage(UIImage *image) {
     return [[MPMediaItemArtwork alloc] initWithImage:image];
 }
 
-static BOOL YTMBackgroundAudioEnabled(void) {
-    id value = [[NSUserDefaults standardUserDefaults]
-                objectForKey:TUNETUBE_BACKGROUND_AUDIO_DEFAULTS_KEY];
-    return !value || [value boolValue];
-}
-
-static void YTMConfigureAudioSession(void) {
+static void TuneTubeConfigureAudioSession(void) {
     NSError *sessionError = nil;
     AVAudioSession *session = [AVAudioSession sharedInstance];
-    NSString *category = YTMBackgroundAudioEnabled()
-        ? YTMPlaybackAudioCategory : YTMAmbientAudioCategory;
-    [session setCategory:category error:&sessionError];
+    [session setCategory:TuneTubePlaybackAudioCategory error:&sessionError];
+    if ([session respondsToSelector:@selector(setMode:error:)])
+        [session setMode:@"AVAudioSessionModeMoviePlayback" error:&sessionError];
     [session setActive:YES error:&sessionError];
 }
 
-static void YTMUpdateNowPlaying(YTMPlayer *player) {
+static void TuneTubeUpdateNowPlaying(TuneTubePlayer *player) {
     Class centerClass = NSClassFromString(@"MPNowPlayingInfoCenter");
     if (!centerClass) return;
     id center = [centerClass performSelector:@selector(defaultCenter)];
     if (!center) return;
 
-    YTMTrack *track = player.track;
+    TuneTubeTrack *track = player.track;
     if (!track) {
         [center setValue:nil forKey:@"nowPlayingInfo"];
         return;
@@ -66,7 +59,7 @@ static void YTMUpdateNowPlaying(YTMPlayer *player) {
     NSMutableDictionary *info = [NSMutableDictionary dictionary];
     if (track.title.length) [info setObject:track.title forKey:@"title"];
     if (track.artist.length)
-        [info setObject:YTMTrackArtistText(track) forKey:@"artist"];
+        [info setObject:TuneTubeTrackArtistText(track) forKey:@"artist"];
     if (track.album.length) [info setObject:track.album forKey:@"albumTitle"];
     NSTimeInterval duration = [player duration];
     if (duration > 0.0) {
@@ -83,7 +76,7 @@ static void YTMUpdateNowPlaying(YTMPlayer *player) {
     [center setValue:info forKey:@"nowPlayingInfo"];
 }
 
-static void YTMUpdateNowPlayingArtwork(YTMPlayer *player, YTMTrack *track,
+static void TuneTubeUpdateNowPlayingArtwork(TuneTubePlayer *player, TuneTubeTrack *track,
                                        NSUInteger generation) {
     if (!track.thumbnailURL.length) return;
     NSString *requestedURL = [track.thumbnailURL copy];
@@ -91,7 +84,7 @@ static void YTMUpdateNowPlayingArtwork(YTMPlayer *player, YTMTrack *track,
         if (!image || player.track != track || generation == 0) return;
         Class centerClass = NSClassFromString(@"MPNowPlayingInfoCenter");
         if (![MPMediaItemArtwork class] || !centerClass) return;
-        MPMediaItemArtwork *artwork = YTMArtworkForImage(image);
+        MPMediaItemArtwork *artwork = TuneTubeArtworkForImage(image);
         id center = [centerClass performSelector:@selector(defaultCenter)];
         if (!artwork || !center || player.track != track) {
             [artwork release];
@@ -107,39 +100,46 @@ static void YTMUpdateNowPlayingArtwork(YTMPlayer *player, YTMTrack *track,
     [requestedURL release];
 }
 
-static NSError *YTMPlayerError(NSInteger code, NSString *message) {
+static NSError *TuneTubePlayerError(NSInteger code, NSString *message) {
     return [NSError errorWithDomain:@"TuneTubePlayerError"
                                code:code
                            userInfo:[NSDictionary dictionaryWithObject:message
                                                                 forKey:NSLocalizedDescriptionKey]];
 }
 
-static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
+static void TuneTubePlayerNotify(TuneTubePlayer *player, NSError *error) {
     if (![NSThread isMainThread]) {
         [player retain];
         [error retain];
         dispatch_async(dispatch_get_main_queue(), ^{
-            YTMPlayerNotify(player, error);
+            TuneTubePlayerNotify(player, error);
             [error release];
             [player release];
         });
         return;
     }
-    YTMUpdateNowPlaying(player);
+    TuneTubeUpdateNowPlaying(player);
     NSMutableDictionary *info = [NSMutableDictionary dictionaryWithObject:player
                                                                         forKey:@"player"];
     if (error) [info setObject:error forKey:@"error"];
-    [[NSNotificationCenter defaultCenter] postNotificationName:YTMPlayerDidChangeNotification
+    [[NSNotificationCenter defaultCenter] postNotificationName:TuneTubePlayerDidChangeNotification
                                                         object:player
                                                       userInfo:info];
 }
 
-@implementation YTMPlayer
+@interface TuneTubePlayer ()
+- (void)itemFailedToPlay:(NSNotification *)note;
+- (void)itemPlaybackStalled:(NSNotification *)note;
+- (void)removeItemStatusObserver;
+@end
+
+@implementation TuneTubePlayer
 
 - (id)init {
     self = [super init];
     if (self) {
         _continuousPlayback = YES;
+        _playbackRate = 1.0f;
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(backgroundAudioChanged:)
                                                      name:TUNETUBE_BACKGROUND_AUDIO_DID_CHANGE_NOTIFICATION
@@ -148,9 +148,11 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
     return self;
 }
 
-- (YTMTrack *)track { return _track; }
+- (TuneTubeTrack *)track { return _track; }
 - (NSArray *)queue { return _queue; }
 - (BOOL)isRepeating { return _repeating; }
+- (BOOL)continuousPlayback { return _continuousPlayback; }
+- (float)playbackRate { return _playbackRate; }
 - (id)nativePlayer { return _player; }
 
 - (BOOL)isPlaying {
@@ -183,24 +185,33 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self removeItemStatusObserver];
     [_player pause];
     [_player release];
     [_track release];
     [_api release];
     [_queue release];
+    [_sleepTimer invalidate];
+    [_sleepTimer release];
     [super dealloc];
 }
 
 - (void)backgroundAudioChanged:(NSNotification *)note {
     (void)note;
-    if (_player) YTMConfigureAudioSession();
+    if (_player) TuneTubeConfigureAudioSession();
 }
 
-- (void)playTrack:(YTMTrack *)track usingAPI:(YTMAPI *)api {
+- (void)playTrack:(TuneTubeTrack *)track usingAPI:(TuneTubeAPI *)api {
     NSUInteger generation;
-    YTMTrack *selectedTrack;
-    YTMAPI *selectedAPI;
+    TuneTubeTrack *selectedTrack;
+    TuneTubeAPI *selectedAPI;
     if (!track || !api) return;
+    if (!track.videoID.length || track.isPlaylist) {
+        [_track release];
+        _track = [track retain];
+        TuneTubePlayerNotify(self, TuneTubePlayerError(6, @"this item has no playable audio"));
+        return;
+    }
     selectedTrack = [track retain];
     selectedAPI = [api retain];
     ++_generation;
@@ -210,7 +221,7 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
     [_track release];
     _track = selectedTrack;
     for (NSUInteger index = 0; index < _queue.count; ++index) {
-        YTMTrack *queued = [_queue objectAtIndex:index];
+        TuneTubeTrack *queued = [_queue objectAtIndex:index];
         if ([queued.videoID isEqualToString:selectedTrack.videoID]) {
             _queueIndex = (NSInteger)index;
             break;
@@ -219,42 +230,110 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:AVPlayerItemDidPlayToEndTimeNotification
                                                   object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:AVPlayerItemFailedToPlayToEndTimeNotification
+                                                  object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:AVPlayerItemPlaybackStalledNotification
+                                                  object:nil];
+    [self removeItemStatusObserver];
     [_player pause];
     [_player release];
     _player = nil;
-    YTMPlayerNotify(self, nil);
+    TuneTubePlayerNotify(self, nil);
 
-    YTMConfigureAudioSession();
+    TuneTubeConfigureAudioSession();
 
     // audio only - no music video / clip playback
     [selectedAPI audioURLForTrack:selectedTrack completion:^(NSURL *audioURL, NSError *audioError) {
         if (generation != _generation) return;
         if (audioError || !audioURL) {
-            YTMPlayerNotify(self, audioError ? audioError :
-                            YTMPlayerError(8, @"track url could not be loaded"));
+            TuneTubePlayerNotify(self, audioError ? audioError :
+                            TuneTubePlayerError(8, @"track url could not be loaded"));
             return;
         }
         AVPlayer *av = [[AVPlayer alloc] initWithURL:audioURL];
         if (!av) {
-            YTMPlayerNotify(self, YTMPlayerError(9, @"media player could not be created"));
+            TuneTubePlayerNotify(self, TuneTubePlayerError(9, @"media player could not be created"));
             return;
         }
+        TuneTubeConfigureAudioSession();
         [_player release];
         _player = av;
+        AVPlayerItem *item = [(AVPlayer *)_player currentItem];
+        if (item) {
+            [item addObserver:self
+                   forKeyPath:@"status"
+                      options:NSKeyValueObservingOptionNew
+                      context:NULL];
+            _observingItemStatus = YES;
+        }
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(itemDidFinish:)
                                                      name:AVPlayerItemDidPlayToEndTimeNotification
                                                    object:[(AVPlayer *)_player currentItem]];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(itemFailedToPlay:)
+                                                     name:AVPlayerItemFailedToPlayToEndTimeNotification
+                                                   object:[(AVPlayer *)_player currentItem]];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(itemPlaybackStalled:)
+                                                     name:AVPlayerItemPlaybackStalledNotification
+                                                   object:[(AVPlayer *)_player currentItem]];
         [(AVPlayer *)_player play];
-        YTMUpdateNowPlayingArtwork(self, selectedTrack, generation);
-        YTMPlayerNotify(self, nil);
+        if (_playbackRate != 1.0f)
+            [(AVPlayer *)_player setRate:_playbackRate];
+        TuneTubeUpdateNowPlayingArtwork(self, selectedTrack, generation);
+        TuneTubePlayerNotify(self, nil);
     }];
 }
 
-- (void)setQueue:(NSArray *)tracks selectedIndex:(NSInteger)index usingAPI:(YTMAPI *)api {
+- (void)removeItemStatusObserver {
+    if (!_observingItemStatus || ![_player isKindOfClass:[AVPlayer class]]) return;
+    AVPlayerItem *item = [(AVPlayer *)_player currentItem];
+    if (item) [item removeObserver:self forKeyPath:@"status"];
+    _observingItemStatus = NO;
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary *)change
+                       context:(void *)context {
+    (void)change;
+    (void)context;
+    if (![keyPath isEqualToString:@"status"] ||
+        object != [(AVPlayer *)_player currentItem]) {
+        return;
+    }
+
+    AVPlayerItem *item = (AVPlayerItem *)object;
+    if (item.status == AVPlayerItemStatusReadyToPlay) {
+        [(AVPlayer *)_player play];
+        if (_playbackRate != 1.0f)
+            [(AVPlayer *)_player setRate:_playbackRate];
+        TuneTubePlayerNotify(self, nil);
+    } else if (item.status == AVPlayerItemStatusFailed) {
+        TuneTubePlayerNotify(self, item.error ? item.error :
+                              TuneTubePlayerError(12, @"audio could not be loaded"));
+    }
+}
+
+- (void)itemFailedToPlay:(NSNotification *)note {
+    if (![note object] || [note object] != [(AVPlayer *)_player currentItem]) return;
+    NSError *error = [[note userInfo] objectForKey:AVPlayerItemFailedToPlayToEndTimeErrorKey];
+    TuneTubePlayerNotify(self, error ? error :
+                         TuneTubePlayerError(12, @"audio could not be loaded"));
+}
+
+- (void)itemPlaybackStalled:(NSNotification *)note {
+    if (![note object] || [note object] != [(AVPlayer *)_player currentItem]) return;
+    TuneTubePlayerNotify(self, TuneTubePlayerError(10, @"audio is still loading"));
+}
+
+- (void)setQueue:(NSArray *)tracks selectedIndex:(NSInteger)index usingAPI:(TuneTubeAPI *)api {
     NSMutableArray *newQueue;
-    YTMTrack *selectedTrack;
-    YTMAPI *selectedAPI;
+    TuneTubeTrack *selectedTrack;
+    TuneTubeAPI *selectedAPI;
     if (![tracks isKindOfClass:[NSArray class]] || !tracks.count || !api) return;
 
     newQueue = [tracks mutableCopy];
@@ -300,7 +379,7 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
         [self loadMoreTracks];
     } else {
         [_player pause];
-        YTMPlayerNotify(self, nil);
+        TuneTubePlayerNotify(self, nil);
     }
 }
 
@@ -309,19 +388,19 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
     _loadingMore = YES;
 
     NSString *query = _track.artist.length ? _track.artist : _track.title;
-    YTMAPI *api = [_api retain];
+    TuneTubeAPI *api = [_api retain];
     [api search:query completion:^(NSArray *tracks, NSError *error) {
         NSMutableArray *fresh = [NSMutableArray array];
         if (!error) {
-            for (YTMTrack *candidate in tracks) {
+            for (TuneTubeTrack *candidate in tracks) {
                 BOOL duplicate = NO;
-                for (YTMTrack *queued in _queue) {
+                for (TuneTubeTrack *queued in _queue) {
                     if ([candidate.videoID isEqualToString:queued.videoID]) {
                         duplicate = YES;
                         break;
                     }
                 }
-                if (!duplicate && candidate.videoID.length) {
+                if (!duplicate && candidate.videoID.length && !candidate.isPlaylist) {
                     [fresh addObject:candidate];
                     if (fresh.count >= 8) break;
                 }
@@ -336,7 +415,7 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
             _loadingMore = NO;
             [api release];
             [_player pause];
-            YTMPlayerNotify(self, error);
+            TuneTubePlayerNotify(self, error);
         }
     }];
 }
@@ -344,32 +423,95 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
 - (void)setRepeating:(BOOL)repeating {
     if (_repeating == repeating) return;
     _repeating = repeating;
-    YTMPlayerNotify(self, nil);
+    TuneTubePlayerNotify(self, nil);
+}
+
+- (void)enqueueTrack:(TuneTubeTrack *)track usingAPI:(TuneTubeAPI *)api afterCurrent:(BOOL)afterCurrent {
+    if (!track || !api) return;
+    if (!_queue) {
+        _queue = [[NSMutableArray alloc] init];
+        if (_track) [_queue addObject:_track];
+        _queueIndex = _queue.count ? (NSInteger)_queue.count - 1 : 0;
+    }
+    NSUInteger index = _queue.count;
+    if (afterCurrent && _queueIndex >= 0 &&
+        _queueIndex < (NSInteger)_queue.count)
+        index = (NSUInteger)_queueIndex + 1;
+    [_queue insertObject:track atIndex:index];
+    if (![_api isEqual:api]) {
+        [_api release];
+        _api = [api retain];
+    }
+    TuneTubePlayerNotify(self, nil);
+}
+
+- (void)setContinuousPlayback:(BOOL)enabled {
+    if (_continuousPlayback == enabled) return;
+    _continuousPlayback = enabled;
+    TuneTubePlayerNotify(self, nil);
+}
+
+- (void)setPlaybackRate:(float)rate {
+    if (rate < 0.5f) rate = 0.5f;
+    if (rate > 2.0f) rate = 2.0f;
+    _playbackRate = rate;
+    if ([_player isKindOfClass:[AVPlayer class]] && [self isPlaying])
+        [(AVPlayer *)_player setRate:_playbackRate];
+    TuneTubePlayerNotify(self, nil);
+}
+
+- (void)sleepTimerFired:(NSTimer *)timer {
+    (void)timer;
+    [_sleepTimer invalidate];
+    [_sleepTimer release];
+    _sleepTimer = nil;
+    if ([_player isKindOfClass:[AVPlayer class]]) [(AVPlayer *)_player pause];
+    TuneTubePlayerNotify(self, nil);
+}
+
+- (void)setSleepTimer:(NSTimeInterval)seconds {
+    [_sleepTimer invalidate];
+    [_sleepTimer release];
+    _sleepTimer = nil;
+    if (seconds <= 0.0) return;
+    _sleepTimer = [[NSTimer scheduledTimerWithTimeInterval:seconds
+                                                     target:self
+                                                   selector:@selector(sleepTimerFired:)
+                                                   userInfo:nil
+                                                    repeats:NO] retain];
+    TuneTubePlayerNotify(self, nil);
+}
+
+- (void)cancelSleepTimer {
+    [self setSleepTimer:0.0];
 }
 
 - (void)toggle {
     if (!_track) return;
     if (![_player isKindOfClass:[AVPlayer class]]) {
-        YTMPlayerNotify(self, YTMPlayerError(10, @"audio is still loading"));
+        TuneTubePlayerNotify(self, TuneTubePlayerError(10, @"audio is still loading"));
         return;
     }
     AVPlayer *player = (AVPlayer *)_player;
     AVPlayerItem *item = [player currentItem];
     if (!item) {
-        YTMPlayerNotify(self, YTMPlayerError(11, @"audio item is missing"));
+        TuneTubePlayerNotify(self, TuneTubePlayerError(11, @"audio item is missing"));
         return;
     }
     if (item.status == AVPlayerItemStatusFailed) {
-        YTMPlayerNotify(self, item.error ? item.error : YTMPlayerError(12, @"audio could not be loaded"));
+        TuneTubePlayerNotify(self, item.error ? item.error : TuneTubePlayerError(12, @"audio could not be loaded"));
         return;
     }
     if (item.status != AVPlayerItemStatusReadyToPlay) {
-        YTMPlayerNotify(self, YTMPlayerError(10, @"audio is still loading"));
+        TuneTubePlayerNotify(self, TuneTubePlayerError(10, @"audio is still loading"));
         return;
     }
     if ([player rate] > 0.0f) [player pause];
-    else [player play];
-    YTMPlayerNotify(self, nil);
+    else {
+        [player play];
+        if (_playbackRate != 1.0f) [player setRate:_playbackRate];
+    }
+    TuneTubePlayerNotify(self, nil);
 }
 
 - (void)seekToProgress:(float)progress {
@@ -382,7 +524,7 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
     [(AVPlayer *)_player seekToTime:time
                     toleranceBefore:kCMTimeZero
                      toleranceAfter:kCMTimeZero];
-    YTMPlayerNotify(self, nil);
+    TuneTubePlayerNotify(self, nil);
 }
 
 - (void)stop {
@@ -390,6 +532,13 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:AVPlayerItemDidPlayToEndTimeNotification
                                                   object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:AVPlayerItemFailedToPlayToEndTimeNotification
+                                                  object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:AVPlayerItemPlaybackStalledNotification
+                                                  object:nil];
+    [self removeItemStatusObserver];
     [_player pause];
     [_player release];
     _player = nil;
@@ -398,7 +547,16 @@ static void YTMPlayerNotify(YTMPlayer *player, NSError *error) {
     [_queue release];
     _queue = nil;
     _queueIndex = 0;
-    YTMPlayerNotify(self, nil);
+    TuneTubePlayerNotify(self, nil);
+}
+
+- (void)clearQueue {
+    NSMutableArray *currentQueue = [NSMutableArray array];
+    if (_track) [currentQueue addObject:_track];
+    [_queue release];
+    _queue = [currentQueue mutableCopy];
+    _queueIndex = 0;
+    TuneTubePlayerNotify(self, nil);
 }
 
 @end
