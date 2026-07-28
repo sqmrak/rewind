@@ -1,6 +1,6 @@
 # tunetube
 
-TuneTube is a YouTube Music client for iOS 5-10.
+a youtube music client for iOS 5-10.
 
 The project is not affiliated with Google or YouTube.
 
