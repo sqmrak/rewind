@@ -708,7 +708,22 @@ static NSURLRequest *TuneTubeRequest(NSString *path, NSString *apiKey, NSDiction
 
 typedef void (^TuneTubeNetworkCompletion)(NSData *data, NSError *error);
 
+static BOOL TuneTubeIsCertificateError(NSError *error) {
+    if (!error) return NO;
+    switch (error.code) {
+        case NSURLErrorSecureConnectionFailed:
+        case NSURLErrorServerCertificateHasBadDate:
+        case NSURLErrorServerCertificateUntrusted:
+        case NSURLErrorServerCertificateHasUnknownRoot:
+        case NSURLErrorServerCertificateNotYetValid:
+            return YES;
+        default:
+            return NO;
+    }
+}
+
 static BOOL TuneTubeShouldTryFallback(NSError *error) {
+    if (TuneTubeIsCertificateError(error)) return YES;
     switch (error.code) {
         case NSURLErrorCannotFindHost:
         case NSURLErrorDNSLookupFailed:
@@ -716,8 +731,6 @@ static BOOL TuneTubeShouldTryFallback(NSError *error) {
         case NSURLErrorNetworkConnectionLost:
         case NSURLErrorCannotConnectToHost:
         case NSURLErrorTimedOut:
-        case NSURLErrorSecureConnectionFailed:
-            return YES;
         default:
             return NO;
     }

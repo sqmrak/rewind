@@ -55,6 +55,16 @@ static UIImage *TuneLibraryImage(CGFloat size) {
 static NSString *TunePlaybackErrorText(NSError *error) {
     NSString *text = [error localizedDescription];
     NSString *lower = [text lowercaseString];
+    switch (error.code) {
+        case NSURLErrorSecureConnectionFailed:
+        case NSURLErrorServerCertificateHasBadDate:
+        case NSURLErrorServerCertificateUntrusted:
+        case NSURLErrorServerCertificateHasUnknownRoot:
+        case NSURLErrorServerCertificateNotYetValid:
+            return TuneL(@"err_connect");
+        default:
+            break;
+    }
     if ([lower rangeOfString:@"operation could not be completed"].location != NSNotFound ||
         [lower rangeOfString:@"nsurlerrordomain"].location != NSNotFound)
         return TuneL(@"err_load_song");
@@ -71,6 +81,10 @@ static BOOL TuneIsNetworkError(NSError *error) {
         case NSURLErrorCannotConnectToHost:
         case NSURLErrorTimedOut:
         case NSURLErrorSecureConnectionFailed:
+        case NSURLErrorServerCertificateHasBadDate:
+        case NSURLErrorServerCertificateUntrusted:
+        case NSURLErrorServerCertificateHasUnknownRoot:
+        case NSURLErrorServerCertificateNotYetValid:
             return YES;
         default:
             break;
@@ -970,6 +984,10 @@ static TuneTubeTrack *TuneTrackWithDuration(TuneTubeTrack *track, NSUInteger dur
                     case NSURLErrorDNSLookupFailed:
                     case NSURLErrorCannotConnectToHost:
                     case NSURLErrorSecureConnectionFailed:
+                    case NSURLErrorServerCertificateHasBadDate:
+                    case NSURLErrorServerCertificateUntrusted:
+                    case NSURLErrorServerCertificateHasUnknownRoot:
+                    case NSURLErrorServerCertificateNotYetValid:
                         _status.text = TuneL(@"err_connect");
                         break;
                     case NSURLErrorTimedOut:
