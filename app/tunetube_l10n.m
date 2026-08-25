@@ -11,9 +11,9 @@ static NSDictionary *TuneTableForCode(NSString *code) {
               @"Done", @"done",
               @"About", @"about",
               @"About TuneTube", @"about_tunetube",
-              @"YouTube Music client for iOS 5-10\n\n"
-              "TuneTube searches YouTube Music and plays audio anonymously.\n\n"
-              "Built for armv7 and arm64.", @"about_body",
+              @"A compact YouTube Music client for legacy iOS.\n\n"
+              "Search songs, artists and albums, keep favourites and playlists, and play audio in the background. TuneTube is built for devices that modern music apps left behind.\n\n"
+              "Built for iOS 5-10 on armv7 and arm64.", @"about_body",
               @"Cancel", @"cancel",
               @"Save", @"save",
               @"Create", @"create",
@@ -120,9 +120,9 @@ static NSDictionary *TuneTableForCode(NSString *code) {
               @"Готово", @"done",
               @"О приложении", @"about",
               @"О TuneTube", @"about_tunetube",
-              @"Клиент YouTube Music для iOS 5–10\n\n"
-              "TuneTube ищет в YouTube Music и играет аудио анонимно.\n\n"
-              "Собран под armv7 и arm64.", @"about_body",
+              @"Компактный клиент YouTube Music для старых iOS.\n\n"
+              "Ищите треки, артистов и альбомы, сохраняйте любимое и плейлисты, слушайте музыку в фоне. TuneTube создан для устройств, которые остались за бортом современных музыкальных приложений.\n\n"
+              "Собран для iOS 5–10 на armv7 и arm64.", @"about_body",
               @"Отмена", @"cancel",
               @"Сохранить", @"save",
               @"Создать", @"create",

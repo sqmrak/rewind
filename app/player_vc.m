@@ -373,7 +373,7 @@ static void TunePlayerStyleNavigationBar(UINavigationBar *bar) {
     titleLabel.backgroundColor = [UIColor clearColor];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter;
-    titleLabel.font = [UIFont boldSystemFontOfSize:12.0f];
+    titleLabel.font = [UIFont boldSystemFontOfSize:13.0f];
     titleLabel.numberOfLines = 2;
     titleLabel.lineBreakMode = UILineBreakModeWordWrap;
     titleLabel.text = title;
@@ -448,7 +448,7 @@ static void TunePlayerStyleNavigationBar(UINavigationBar *bar) {
     _table.backgroundColor = [UIColor blackColor];
     _table.backgroundView = nil;
     _table.separatorColor = [UIColor colorWithWhite:1.0f alpha:0.08f];
-    _table.rowHeight = 58.0f;
+    _table.rowHeight = 56.0f;
     _table.dataSource = self;
     _table.delegate = self;
     _header = [[self buildHeader] retain];
@@ -461,9 +461,9 @@ static void TunePlayerStyleNavigationBar(UINavigationBar *bar) {
              [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_remove_library"), @"title", @"menu-library-remove.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionLibrary], @"action", nil],
              [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_download"), @"title", @"menu-download.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionDownload], @"action", nil],
              [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_remove_playlist"), @"title", @"menu-playlist-remove.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionRemovePlaylist], @"action", nil],
-             [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_album"), @"title", @"menu-more.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionAlbum], @"action", nil],
-             [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_artist"), @"title", @"menu-share.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionArtist], @"action", nil],
-             [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_clear_queue"), @"title", @"menu-queue-add.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionClearQueue], @"action", nil],
+             [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_album"), @"title", @"menu-album.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionAlbum], @"action", nil],
+             [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_artist"), @"title", @"menu-artist.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionArtist], @"action", nil],
+             [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_clear_queue"), @"title", @"menu-queue-clear.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionClearQueue], @"action", nil],
              [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_speed"), @"title", @"menu-speed.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionSpeed], @"action", nil],
              [NSDictionary dictionaryWithObjectsAndKeys:TuneL(@"menu_sleep"), @"title", @"menu-sleep.png", @"icon", [NSNumber numberWithInteger:TunePlayerMenuActionSleep], @"action", nil],
              nil];
@@ -484,7 +484,7 @@ static void TunePlayerStyleNavigationBar(UINavigationBar *bar) {
     _gradient.frame = bounds;
     _table.frame = bounds;
     CGFloat width = bounds.size.width;
-    CGFloat side = width > 600.0f ? 24.0f : 16.0f;
+    CGFloat side = width > 700.0f ? 24.0f : 12.0f;
     BOOL headerWidthChanged = fabs(_header.frame.size.width - width) > 0.5f;
     _header.frame = CGRectMake(0.0f, 0.0f, width, 218.0f);
     _closeButton.frame = CGRectMake(8.0f, 12.0f, 38.0f, 34.0f);
@@ -495,7 +495,7 @@ static void TunePlayerStyleNavigationBar(UINavigationBar *bar) {
     _headerArtist.frame = CGRectMake(textX, 34.0f, textWidth - 55.0f, 20.0f);
     _headerDuration.frame = CGRectMake(width - side - 55.0f, 34.0f, 55.0f, 20.0f);
 
-    CGFloat gap = width > 600.0f ? 16.0f : 12.0f;
+    CGFloat gap = width > 700.0f ? 16.0f : 12.0f;
     CGFloat cardWidth = floorf((width - side * 2.0f - gap * 2.0f) / 3.0f);
     if (width > 600.0f) cardWidth = MIN(cardWidth, 190.0f);
     CGFloat cardsWidth = cardWidth * 3.0f + gap * 2.0f;
@@ -506,8 +506,8 @@ static void TunePlayerStyleNavigationBar(UINavigationBar *bar) {
                                   cardWidth, 92.0f);
         UIImageView *icon = (UIImageView *)[button viewWithTag:1001];
         UILabel *title = (UILabel *)[button viewWithTag:1002];
-        icon.frame = CGRectMake(0.0f, 7.0f, cardWidth, 30.0f);
-        title.frame = CGRectMake(5.0f, 42.0f, cardWidth - 10.0f, 40.0f);
+        icon.frame = CGRectMake(0.0f, 9.0f, cardWidth, 28.0f);
+        title.frame = CGRectMake(6.0f, 43.0f, cardWidth - 12.0f, 34.0f);
     }
     if (headerWidthChanged) _table.tableHeaderView = _header;
 }
@@ -566,18 +566,18 @@ static void TunePlayerStyleNavigationBar(UINavigationBar *bar) {
         cell.backgroundColor = [UIColor blackColor];
         cell.contentView.backgroundColor = [UIColor blackColor];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
-        UIImageView *icon = [[[UIImageView alloc] initWithFrame:CGRectMake(17.0f, 9.0f,
-                                                                            52.0f, 40.0f)] autorelease];
+        UIImageView *icon = [[[UIImageView alloc] initWithFrame:CGRectMake(16.0f, 12.0f,
+                                                                            32.0f, 32.0f)] autorelease];
         icon.tag = 2001;
         icon.backgroundColor = [UIColor clearColor];
         icon.contentMode = UIViewContentModeScaleAspectFit;
         [cell.contentView addSubview:icon];
-        UILabel *title = [[[UILabel alloc] initWithFrame:CGRectMake(90.0f, 0.0f,
-                                                                      220.0f, 58.0f)] autorelease];
+        UILabel *title = [[[UILabel alloc] initWithFrame:CGRectMake(62.0f, 0.0f,
+                                                                      220.0f, 56.0f)] autorelease];
         title.tag = 2002;
         title.backgroundColor = [UIColor clearColor];
         title.textColor = [UIColor whiteColor];
-        title.font = [UIFont boldSystemFontOfSize:16.0f];
+        title.font = [UIFont boldSystemFontOfSize:15.0f];
         title.lineBreakMode = UILineBreakModeTailTruncation;
         title.adjustsFontSizeToFitWidth = YES;
         title.minimumFontSize = 11.0f;
@@ -588,10 +588,8 @@ static void TunePlayerStyleNavigationBar(UINavigationBar *bar) {
     UILabel *title = (UILabel *)[cell.contentView viewWithTag:2002];
     icon.image = [UIImage imageNamed:[row objectForKey:@"icon"]];
     title.text = [row objectForKey:@"title"];
-    NSInteger action = [[row objectForKey:@"action"] integerValue];
-    title.font = [UIFont boldSystemFontOfSize:
-                  action == TunePlayerMenuActionSpeed ? 14.0f : 16.0f];
-    title.frame = CGRectMake(90.0f, 0.0f, tableView.bounds.size.width - 102.0f, 58.0f);
+    title.font = [UIFont boldSystemFontOfSize:15.0f];
+    title.frame = CGRectMake(62.0f, 0.0f, tableView.bounds.size.width - 74.0f, 56.0f);
     return cell;
 }
 

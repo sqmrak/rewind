@@ -10,6 +10,7 @@
     UIView *_info;
     UILabel *_bodyLabel;
     UIButton *_githubButton;
+    UIButton *_telegramButton;
     CAGradientLayer *_backgroundGradient;
     CAGradientLayer *_cardGradient;
     CAGradientLayer *_infoGradient;

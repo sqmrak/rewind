@@ -7,6 +7,7 @@
 
 @interface TuneAboutVC ()
 - (void)githubPressed;
+- (void)telegramPressed;
 - (void)backPressed;
 - (void)applyTheme:(NSNotification *)note;
 - (void)languageChanged:(NSNotification *)note;
@@ -22,6 +23,7 @@
     [_info release];
     [_bodyLabel release];
     [_githubButton release];
+    [_telegramButton release];
     [_backgroundGradient release];
     [_cardGradient release];
     [_infoGradient release];
@@ -63,12 +65,12 @@
     [self.view addSubview:_scroll];
 
     _card = [[UIView alloc] initWithFrame:CGRectZero];
-    _card.layer.cornerRadius = 14.0f;
+    _card.layer.cornerRadius = 16.0f;
     _card.layer.masksToBounds = YES;
     _card.layer.borderWidth = 1.0f;
     _card.layer.borderColor = TuneThemeBorder().CGColor;
     _cardGradient = [[CAGradientLayer layer] retain];
-    _cardGradient.cornerRadius = 14.0f;
+    _cardGradient.cornerRadius = 16.0f;
     [_card.layer insertSublayer:_cardGradient atIndex:0];
     [_scroll addSubview:_card];
 
@@ -76,7 +78,7 @@
     avatar.tag = 1;
     avatar.backgroundColor = TuneThemeSurface();
     avatar.contentMode = UIViewContentModeScaleAspectFill;
-    avatar.layer.cornerRadius = 12.0f;
+    avatar.layer.cornerRadius = 14.0f;
     avatar.layer.masksToBounds = YES;
     avatar.layer.borderWidth = 2.0f;
     avatar.layer.borderColor = TuneThemeBorder().CGColor;
@@ -86,29 +88,39 @@
     name.tag = 2;
     name.backgroundColor = [UIColor clearColor];
     name.textColor = TuneThemePrimaryText();
-    name.shadowColor = [UIColor colorWithWhite:0 alpha:0.62f];
-    name.shadowOffset = CGSizeMake(0.0f, 1.0f);
+    name.numberOfLines = 3;
     name.font = [UIFont boldSystemFontOfSize:15.0f];
-    name.text = @"TuneTube-v1.0.3-stable";
+    name.lineBreakMode = UILineBreakModeWordWrap;
+    name.text = [NSString stringWithFormat:@"TuneTube\n%@\nLegacy YouTube Music", TUNETUBE_VERSION];
     [_card addSubview:name];
 
     _githubButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
     [_githubButton setTitle:@"github.com/sqmrak" forState:UIControlStateNormal];
-    [_githubButton setTitleColor:[UIColor whiteColor]
+    [_githubButton setTitleColor:TuneThemePrimaryText()
                         forState:UIControlStateNormal];
-    _githubButton.titleLabel.font = [UIFont systemFontOfSize:14.0f];
+    _githubButton.titleLabel.font = [UIFont systemFontOfSize:13.0f];
     _githubButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     [_githubButton addTarget:self action:@selector(githubPressed)
             forControlEvents:UIControlEventTouchUpInside];
     [_card addSubview:_githubButton];
 
+    _telegramButton = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
+    [_telegramButton setTitle:@"t.me/sqmrakdev" forState:UIControlStateNormal];
+    [_telegramButton setTitleColor:TuneThemePrimaryText()
+                         forState:UIControlStateNormal];
+    _telegramButton.titleLabel.font = [UIFont systemFontOfSize:13.0f];
+    _telegramButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    [_telegramButton addTarget:self action:@selector(telegramPressed)
+              forControlEvents:UIControlEventTouchUpInside];
+    [_card addSubview:_telegramButton];
+
     _info = [[UIView alloc] initWithFrame:CGRectZero];
-    _info.layer.cornerRadius = 14.0f;
+    _info.layer.cornerRadius = 16.0f;
     _info.layer.masksToBounds = YES;
     _info.layer.borderWidth = 1.0f;
     _info.layer.borderColor = TuneThemeBorder().CGColor;
     _infoGradient = [[CAGradientLayer layer] retain];
-    _infoGradient.cornerRadius = 14.0f;
+    _infoGradient.cornerRadius = 16.0f;
     [_info.layer insertSublayer:_infoGradient atIndex:0];
     [_scroll addSubview:_info];
 
@@ -135,8 +147,10 @@
     _info.layer.borderColor = TuneThemeBorder().CGColor;
     ((UIImageView *)[_card viewWithTag:1]).layer.borderColor = TuneThemeBorder().CGColor;
     ((UILabel *)[_card viewWithTag:2]).textColor = TuneThemePrimaryText();
-    [_githubButton setTitleColor:[UIColor whiteColor]
+    [_githubButton setTitleColor:TuneThemePrimaryText()
                         forState:UIControlStateNormal];
+    [_telegramButton setTitleColor:TuneThemePrimaryText()
+                         forState:UIControlStateNormal];
     _bodyLabel.textColor = TuneThemeSecondaryText();
     [self layoutAbout];
 }
@@ -155,17 +169,18 @@
     CGFloat side = bounds.size.width > 700.0f ? 22.0f : 12.0f;
     CGFloat cardWidth = MAX(160.0f, contentWidth - side * 2.0f);
 
-    _card.frame = CGRectMake(contentX + side, 16.0f, cardWidth, 118.0f);
+    _card.frame = CGRectMake(contentX + side, 16.0f, cardWidth, 128.0f);
     _cardGradient.frame = _card.bounds;
     _cardGradient.colors = [NSArray arrayWithObjects:
                             (id)TuneThemeSurfaceTop().CGColor,
                             (id)TuneThemeSurfaceBottom().CGColor, nil];
     UIImageView *avatar = (UIImageView *)[_card viewWithTag:1];
     UILabel *name = (UILabel *)[_card viewWithTag:2];
-    avatar.frame = CGRectMake(14.0f, 14.0f, 90.0f, 90.0f);
-    name.font = [UIFont boldSystemFontOfSize:cardWidth < 360.0f ? 14.0f : 18.0f];
-    name.frame = CGRectMake(120.0f, 25.0f, MAX(40.0f, cardWidth - 132.0f), 25.0f);
-    _githubButton.frame = CGRectMake(120.0f, 57.0f, MAX(40.0f, cardWidth - 132.0f), 25.0f);
+    avatar.frame = CGRectMake(14.0f, 14.0f, 100.0f, 100.0f);
+    name.font = [UIFont boldSystemFontOfSize:15.0f];
+    name.frame = CGRectMake(128.0f, 16.0f, MAX(40.0f, cardWidth - 140.0f), 52.0f);
+    _githubButton.frame = CGRectMake(128.0f, 72.0f, MAX(40.0f, cardWidth - 140.0f), 20.0f);
+    _telegramButton.frame = CGRectMake(128.0f, 94.0f, MAX(40.0f, cardWidth - 140.0f), 20.0f);
 
     CGFloat textWidth = cardWidth - 32.0f;
     CGSize textSize = [_bodyLabel.text sizeWithFont:_bodyLabel.font
@@ -190,6 +205,12 @@
 
 - (void)githubPressed {
     NSURL *url = [NSURL URLWithString:@"https://github.com/sqmrak"];
+    if ([[UIApplication sharedApplication] canOpenURL:url])
+        [[UIApplication sharedApplication] openURL:url];
+}
+
+- (void)telegramPressed {
+    NSURL *url = [NSURL URLWithString:@"https://t.me/sqmrakdev"];
     if ([[UIApplication sharedApplication] canOpenURL:url])
         [[UIApplication sharedApplication] openURL:url];
 }
