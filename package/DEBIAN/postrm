@@ -1,0 +1,30 @@
+#!/bin/sh
+# the rootful copy is not a dpkg file, so removal takes it out by hand before the cache rebuild
+
+case "$1" in
+  remove|purge)
+    if [ -e /var/jb/.procursus_strapped ] || [ -x /var/jb/basebin/launchctl ] || [ -x /var/jb/usr/bin/dpkg ]; then
+      JBROOT=/var/jb
+    else
+      JBROOT=
+    fi
+    killall -9 Rewind >/dev/null 2>&1 || true
+    if [ -z "$JBROOT" ] && [ -f /Applications/Rewind.app/.rewind-rootful-copy ]; then
+      rm -rf /Applications/Rewind.app
+    fi
+    UICACHE=${JBROOT}/usr/bin/uicache
+    [ -x "$UICACHE" ] || UICACHE=/usr/bin/uicache
+    INSTALL_CACHE=/var/mobile/Library/Caches/com.apple.mobile.installation.plist
+    SU=/bin/su
+    [ -x "$SU" ] || SU=/usr/bin/su
+    if [ -x "$UICACHE" ]; then
+      if [ -z "$JBROOT" ] && [ -f "$INSTALL_CACHE" ] && [ -x "$SU" ]; then
+        ( "$SU" - mobile -c "$UICACHE" >/dev/null 2>&1 || "$UICACHE" >/dev/null 2>&1 || true ) </dev/null &
+      else
+        ( "$UICACHE" >/dev/null 2>&1 || true ) </dev/null &
+      fi
+    fi
+    ;;
+esac
+
+exit 0

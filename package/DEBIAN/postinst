@@ -1,0 +1,70 @@
+#!/bin/sh
+# dpkg does not tell springboard about an app bundle; this places the bundle where the
+# jailbreak expects it and rebuilds the app cache so the icon appears
+
+PAYLOAD=/var/jb/Applications/Rewind.app
+if [ -e /var/jb/.procursus_strapped ] || [ -x /var/jb/basebin/launchctl ] || [ -x /var/jb/usr/bin/dpkg ]; then
+  JBROOT=/var/jb
+else
+  JBROOT=
+fi
+UICACHE=${JBROOT}/usr/bin/uicache
+[ -x "$UICACHE" ] || UICACHE=/usr/bin/uicache
+KILLALL=${JBROOT}/usr/bin/killall
+[ -x "$KILLALL" ] || KILLALL=/usr/bin/killall
+[ -x "$KILLALL" ] || KILLALL=/bin/killall
+
+# rootful springboard only lists bundles on the system Applications volume;
+# rootless jailbreaks register /var/jb/Applications with their own uicache
+if [ -z "$JBROOT" ]; then
+  APP=/Applications/Rewind.app
+  rm -rf "${APP}.dpkg-new" 2>/dev/null || true
+  cp -R "$PAYLOAD" "${APP}.dpkg-new" || exit 1
+  : > "${APP}.dpkg-new/.rewind-rootful-copy"
+  [ -L "$APP" ] && rm -f "$APP"
+  rm -rf "$APP" 2>/dev/null || true
+  mv "${APP}.dpkg-new" "$APP" || exit 1
+  chown -R root:wheel "$APP" 2>/dev/null || true
+  chmod 755 "$APP" "$APP/Rewind" 2>/dev/null || true
+  # ios 5 and 6 pick the listed icon closest to 120 px, which is the square ios 7 one, and
+  # never mask /Applications icons; without the ios 7 sizes they take the rounded 57/114
+  OS_MAJOR=$(grep -A1 '<key>ProductVersion</key>' /System/Library/CoreServices/SystemVersion.plist 2>/dev/null \
+    | sed -n 's/.*<string>\([0-9]*\).*/\1/p')
+  if [ -n "$OS_MAJOR" ] && [ "$OS_MAJOR" -lt 7 ]; then
+    rm -f "$APP"/RewindIcon-60@*.png "$APP"/RewindIcon-76*.png "$APP"/RewindIcon-83.5@2x.png
+    # the cached bitmap is keyed by the plist's file list, which did not change
+    rm -f /var/mobile/Library/Caches/com.apple.IconsCache/com.sqmrak.rewind_* 2>/dev/null || true
+  fi
+else
+  APP=$PAYLOAD
+fi
+
+# the old binary keeps running from memory after an upgrade
+"$KILLALL" -9 Rewind TuneTube >/dev/null 2>&1 || true
+
+[ -x "$UICACHE" ] || exit 0
+
+# ios 7 and older keep the app list in mobile's installation cache, and uicache run as
+# root stops at "cannot open cache file. incorrect user?"; newer uicache needs root
+INSTALL_CACHE=/var/mobile/Library/Caches/com.apple.mobile.installation.plist
+SU=/bin/su
+[ -x "$SU" ] || SU=/usr/bin/su
+refresh_app_cache() {
+  if [ -z "$JBROOT" ] && [ -f "$INSTALL_CACHE" ] && [ -x "$SU" ]; then
+    "$SU" - mobile -c "$UICACHE -p $APP" && return 0
+    "$SU" - mobile -c "$UICACHE" && return 0
+  fi
+  "$UICACHE" -p "$APP" || "$UICACHE"
+}
+
+# backgrounding avoids an ios 6 uicache deadlock while the old app is still alive
+( refresh_app_cache >/dev/null 2>&1 || true ) </dev/null &
+
+# ios 5 and 6 register the app after uicache but keep drawing the icon springboard loaded
+# blank until it restarts (seen on the ios 5.1.1 test phone); the delay lets dpkg record
+# the configured state first
+if [ -z "$JBROOT" ] && [ -f "$INSTALL_CACHE" ] && [ "${REWIND_SKIP_RESPRING:-0}" != "1" ]; then
+  ( sleep 3; "$KILLALL" -9 SpringBoard >/dev/null 2>&1 || true ) </dev/null >/dev/null 2>&1 &
+fi
+
+exit 0

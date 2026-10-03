@@ -1,0 +1,14 @@
+Package: com.sqmrak.rewind
+Name: Rewind
+Version: 1.0.0-stable
+Architecture: all
+Description: YouTube Music client for jailbroken iOS 5-16 (armv7 + arm64)
+Maintainer: sqmrak
+Author: sqmrak
+Section: Multimedia
+Priority: optional
+License: GPL-2.0-only
+Depends: firmware (>= 5.0)
+Replaces: com.sqmrak.tunetube
+Conflicts: com.sqmrak.tunetube
+Provides: com.sqmrak.tunetube

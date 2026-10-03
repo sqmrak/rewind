@@ -1,0 +1,41 @@
+# build output
+.build-slices/
+build/
+.ipa-stage/
+package/Applications/
+package/var/
+package/usr/
+
+# release archives
+*.ipa
+*.deb
+
+# local test binaries
+tests/test_model
+tests/test_qr
+tests/test_ump
+tests/test_audio
+tests/test_sabr
+tests/test_fmp4
+tests/test_playback
+tests/test_layout
+
+# python caches
+__pycache__/
+*.py[cod]
+
+# macOS/editor files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# local credentials and machine-specific overrides
+.env
+.env.*
+*.local
+*.key
+*.p12
+*.pfx
+account.plist
+*.log
