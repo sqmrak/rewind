@@ -57,6 +57,7 @@ make deb
 needs `THEOS REWIND_SDK_V7 REWIND_SDK_V64`, outputs `rewind_<version>.deb`.
 `REWIND_TC`, `REWIND_LIPO` and `REWIND_LDID` override the toolchain tools.
 `make fat` builds the app, `make ipa` builds an ipa.
+`art/render_app_icon.py` redraws the home screen icons (numpy, scipy, pillow).
 
 offline download checks: [tests/download_probe.md](tests/download_probe.md).
 

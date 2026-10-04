@@ -2,7 +2,6 @@
 
 #import <QuartzCore/QuartzCore.h>
 #import <AVFoundation/AVFoundation.h>
-#import "video_vc.h"
 #import <dispatch/dispatch.h>
 #include <math.h>
 #include "rewind_layout.h"
@@ -646,14 +645,12 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
     if (!_progressTimer)
         _progressTimer = [[NSTimer scheduledTimerWithTimeInterval:0.4 target:self
                                                           selector:@selector(progressTick:) userInfo:nil repeats:YES] retain];
-    [self becomeFirstResponder];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
     [_progressTimer invalidate];
     [_progressTimer release];
     _progressTimer = nil;
-    [self resignFirstResponder];
     [super viewWillDisappear:animated];
 }
 
@@ -906,12 +903,13 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
     RewindTrack *track = _player.track;
     if (!track) return;
     if (!RewindAccountIsSignedIn()) {
-        RewindShowToast(self.view, RewindL(@"account_sign_in_detail"), RW(28.0f));
+        RewindShowToast(self.view, RewindL(@"dislike_sign_in"), RW(28.0f));
         return;
     }
     BOOL disliked = !RewindAccountTrackIsDisliked(track);
     RewindAccountSetDisliked(track, disliked, ^(NSError *error) {
         if (error) RewindShowToast(self.view, RewindFriendlyError(error), RW(28.0f));
+        else if (disliked) RewindShowToast(self.view, RewindL(@"dislike_done"), RW(28.0f));
         [self refresh:nil];
     });
 }
@@ -948,30 +946,6 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
 }
 
 - (void)sharePressed { [self shareTrack:_player.track]; }
-
-- (void)watchVideo:(RewindTrack *)track {
-    if (!_api || !track) return;
-    if (!NSClassFromString(@"AVPlayer") || !NSClassFromString(@"AVPlayerLayer")) {
-        [_api musicVideoURLForTrack:track completion:^(NSURL *url, NSError *error) {
-            if (error || !url || ![[UIApplication sharedApplication] openURL:url])
-                RewindShowToast(self.view, error ? RewindFriendlyError(error) : RewindL(@"err_unavailable"), RW(24.0f));
-        }];
-        return;
-    }
-    NSUInteger request = _request;
-    RewindShowToast(self.view, RewindL(@"loading_tracks"), RW(24.0f));
-    [_api musicVideoStreamForTrack:track completion:^(NSURL *url, NSError *error) {
-        if (request != _request || !self.view.window) return;
-        if (!url || error) {
-            RewindShowToast(self.view, error ? RewindFriendlyError(error) : RewindL(@"err_unavailable"), RW(24.0f));
-            return;
-        }
-        RewindVideoVC *movie = [[[RewindVideoVC alloc] initWithURL:url
-            userAgent:RewindAudioUserAgentForURL(url)] autorelease];
-        if (_player.playing) [_player toggle];
-        [self presentViewController:movie animated:YES completion:nil];
-    }];
-}
 
 - (void)tabPressed:(UIButton *)button {
     if (button.tag == 1 && _lyricsError && !_lyricsLoading) _lyricsAttempted = NO;
@@ -1021,6 +995,11 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
         _panelPlay = [[RewindIconButton buttonWithIcon:_player.playing ? @"pause" : @"play" points:RW(24.0f)] retain];
         [_panelPlay addTarget:self action:@selector(playPressed) forControlEvents:UIControlEventTouchUpInside];
         [_panel addSubview:_panelPlay];
+        /* the panel covers the player's own close key, and on the ipad nothing else hides it */
+        RewindIconButton *hide = [RewindIconButton buttonWithIcon:@"chevron-down" points:RW(26.0f)];
+        hide.tag = 396;
+        [hide addTarget:self action:@selector(hidePanel) forControlEvents:UIControlEventTouchUpInside];
+        [_panel addSubview:hide];
         _panelPlaySpinner = [[UIActivityIndicatorView alloc]
                              initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
         _panelPlaySpinner.hidesWhenStopped = YES;
@@ -1171,11 +1150,12 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
     _panelBackground.frame = b;
     CGFloat top = [self panelHeaderHeight], tabs = RW(52.0f), inset = top - RW(88.0f);
     [_panel viewWithTag:398].frame = CGRectMake(0, top, b.size.width, b.size.height - top + RW(40.0f));
-    [_panel viewWithTag:399].frame = CGRectMake(0, 0, b.size.width - RW(64.0f), top);
+    [_panel viewWithTag:399].frame = CGRectMake(0, 0, b.size.width - RW(116.0f), top);
+    [_panel viewWithTag:396].frame = CGRectMake(b.size.width - RW(58.0f), inset + RW(20.0f), RW(48.0f), RW(48.0f));
     _panelArt.frame = CGRectMake(RW(16.0f), inset + RW(14.0f), RW(60.0f), RW(60.0f));
-    _panelTitle.frame = CGRectMake(RW(92.0f), inset + RW(20.0f), b.size.width - RW(92.0f) - RW(64.0f), RW(26.0f));
-    _panelArtist.frame = CGRectMake(RW(92.0f), inset + RW(46.0f), b.size.width - RW(92.0f) - RW(64.0f), RW(22.0f));
-    _panelPlay.frame = CGRectMake(b.size.width - RW(62.0f), inset + RW(20.0f), RW(48.0f), RW(48.0f));
+    _panelTitle.frame = CGRectMake(RW(92.0f), inset + RW(20.0f), b.size.width - RW(92.0f) - RW(116.0f), RW(26.0f));
+    _panelArtist.frame = CGRectMake(RW(92.0f), inset + RW(46.0f), b.size.width - RW(92.0f) - RW(116.0f), RW(22.0f));
+    _panelPlay.frame = CGRectMake(b.size.width - RW(110.0f), inset + RW(20.0f), RW(48.0f), RW(48.0f));
     _panelPlaySpinner.center = _panelPlay.center;
     for (NSUInteger index = 0; index < 3; ++index)
         [_panel viewWithTag:410 + (NSInteger)index].frame = CGRectMake(index * b.size.width / 3.0f,
@@ -1420,8 +1400,6 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
                                 action:^{ [owner performMenuAction:RewindPlayerMenuActionLibrary]; }],
         [RewindSheetItem itemWithIcon:@"download" title:RewindL(@"menu_download")
                                 action:^{ [owner performMenuAction:RewindPlayerMenuActionDownload]; }],
-        [RewindSheetItem itemWithIcon:@"play" title:RewindL(@"watch_video")
-                                action:^{ [owner performMenuAction:RewindPlayerMenuActionVideo]; }],
         [RewindSheetItem itemWithIcon:@"album" title:RewindL(@"menu_album")
                                 action:^{ [owner performMenuAction:RewindPlayerMenuActionAlbum]; }],
         [RewindSheetItem itemWithIcon:@"artist" title:RewindL(@"menu_artist")
@@ -1445,7 +1423,6 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
             break;
         case RewindPlayerMenuActionPlaylist: [self showPlaylistPicker]; break;
         case RewindPlayerMenuActionShare: [self shareTrack:track]; break;
-        case RewindPlayerMenuActionVideo: [self watchVideo:track]; break;
         case RewindPlayerMenuActionMix:
             [_player setContinuousPlayback:YES];
             if (RewindAccountIsSignedIn()) {
@@ -1571,19 +1548,6 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
             if (index == 0) [_player cancelSleepTimer];
             else [_player setSleepTimer:times[index]];
         }
-    }
-}
-
-- (BOOL)canBecomeFirstResponder { return YES; }
-
-- (void)remoteControlReceivedWithEvent:(UIEvent *)event {
-    if (event.type != UIEventTypeRemoteControl) return;
-    switch (event.subtype) {
-        case UIEventSubtypeRemoteControlPlay: case UIEventSubtypeRemoteControlPause:
-        case UIEventSubtypeRemoteControlTogglePlayPause: [_player toggle]; break;
-        case UIEventSubtypeRemoteControlNextTrack: [_player nextTrack]; break;
-        case UIEventSubtypeRemoteControlPreviousTrack: [_player previousTrack]; break;
-        default: break;
     }
 }
 

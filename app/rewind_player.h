@@ -70,6 +70,8 @@ extern NSString * const RewindPlayerDidChangeNotification;
 @property(nonatomic, readonly) float playbackRate;
 @property(nonatomic, readonly) NSInteger queueIndex;
 @property(nonatomic, readonly, getter=isShuffling) BOOL shuffling;
+/* a held record; a track change drops it while the finger is still down */
+@property(nonatomic, readonly, getter=isScratching) BOOL scratching;
 
 - (void)playTrack:(RewindTrack *)track usingAPI:(RewindAPI *)api;
 - (void)setQueue:(NSArray *)tracks selectedIndex:(NSInteger)index usingAPI:(RewindAPI *)api;

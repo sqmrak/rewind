@@ -60,7 +60,6 @@ def parser_tests(directory):
     names = ['RewindString', 'RewindCleanText', 'RewindText', 'RewindFindValueForKey',
              'RewindCollectValuesForKey', 'RewindDict', 'RewindArray',
              'RewindWatchTabBrowseID', 'RewindUnsigned', 'RewindFormatBitrate',
-             'RewindMusicVideoCounterpart', 'RewindMusicVideoCandidates',
              'RewindTimedLyrics', 'RewindPlainLyrics']
     units = ['#import "' + str(ROOT / 'app/rewind_api.h') + '"',
              '#include <stdint.h>', '#include <limits.h>',

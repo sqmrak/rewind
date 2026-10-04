@@ -17,7 +17,6 @@
 #import "account_vc.h"
 #import "vinyl_view.h"
 #import "player_vc.h"
-#import "video_vc.h"
 #import "rewind_download.h"
 #import "rewind_chrome.h"
 
@@ -150,13 +149,12 @@ static RewindNativeContext *RewindNativeContextMake(RewindPlayer *player, Rewind
     RewindVinylView *_vinyl;
     UIView *_panel;
     UIActivityIndicatorView *_playSpinner;
-    UIButton *_moreButton;
+    UIButton *_likeButton, *_dislikeButton;
     RewindTrack *_menuTrack;
     UIView *_lyricsPanel;
     UIView *_lyricsHeader;
     UIImageView *_lyricsThumb;
     UILabel *_lyricsHeading;
-    UIButton *_lyricsButton;
     UITableView *_lyricsTable;
     UILabel *_lyricsStatus;
     UIActivityIndicatorView *_lyricsSpinner;
@@ -551,7 +549,7 @@ static UIImage *RewindNativeKeyImage(BOOL pressed) {
         [_spinner stopAnimating];
         NSMutableArray *kept = [NSMutableArray array];
         for (RewindShelf *shelf in shelves)
-            if ([shelf isKindOfClass:[RewindShelf class]] && shelf.items.count) [kept addObject:shelf];
+            if ([shelf isKindOfClass:[RewindShelf class]] && shelf.items.count && !shelf.videoLineup) [kept addObject:shelf];
         [_shelves release];
         _shelves = [kept copy];
         [_offsets removeAllObjects];
@@ -852,7 +850,7 @@ static UIImage *RewindNativeTrackImage(BOOL filled) {
     static UIImage *fill, *groove;
     UIImage **slot = filled ? &fill : &groove;
     if (*slot) return *slot;
-    const CGFloat side = 7.0f;
+    const CGFloat side = 10.0f;
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(side + 2.0f, side), NO, 0.0f);
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     CGRect rect = CGRectMake(0.0f, 0.0f, side + 2.0f, side);
@@ -882,7 +880,7 @@ static UIImage *RewindNativeTrackImage(BOOL filled) {
 static UIImage *RewindNativeThumbImage(void) {
     static UIImage *thumb;
     if (thumb) return thumb;
-    const CGFloat canvas = 28.0f, disc = 23.0f;
+    const CGFloat canvas = 34.0f, disc = 29.0f;
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(canvas, canvas), NO, 0.0f);
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     CGRect ball = CGRectMake((canvas - disc) * 0.5f, (canvas - disc) * 0.5f - 1.0f, disc, disc);
@@ -963,8 +961,8 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
     [_playSpinner release];
     _lyricsTable.delegate = nil;
     _lyricsTable.dataSource = nil;
-    [_moreButton release]; [_menuTrack release]; [_lyricsPanel release]; [_lyricsTable release];
-    [_lyricsHeader release]; [_lyricsThumb release]; [_lyricsHeading release]; [_lyricsButton release];
+    [_likeButton release]; [_dislikeButton release]; [_menuTrack release]; [_lyricsPanel release]; [_lyricsTable release];
+    [_lyricsHeader release]; [_lyricsThumb release]; [_lyricsHeading release];
     [_lyricsStatus release]; [_lyricsSpinner release];
     [_lyrics release]; [_lyricsError release]; [_lyricsVideoID release]; [_lyricHeights release];
     [_artworkURL release];
@@ -1015,7 +1013,7 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
     self.navigationItem.titleView = _countLabel;
     self.navigationItem.leftBarButtonItem = RewindBackBarItem(self, @selector(backPressed));
     self.navigationItem.rightBarButtonItem = RewindChromeBarItem(nil, RewindNativeListGlyph(), NO, self,
-                                                                 @selector(queuePressed));
+                                                                 @selector(morePressed));
 
     _elapsedLabel = [[self labelWithSize:13.0f bold:YES color:white align:NSTextAlignmentLeft] retain];
     _remainingLabel = [[self labelWithSize:13.0f bold:YES color:white align:NSTextAlignmentRight] retain];
@@ -1029,15 +1027,12 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
     [self.view addSubview:_slider];
     _repeatButton = [[self buttonWithIcon:@"repeat" points:24.0f action:@selector(repeatPressed)] retain];
     _shuffleButton = [[self buttonWithIcon:@"shuffle" points:24.0f action:@selector(shufflePressed)] retain];
-    _moreButton = [[self buttonWithIcon:@"more" points:26.0f action:@selector(morePressed)] retain];
-    _lyricsButton = [[self buttonWithIcon:@"note" points:24.0f action:@selector(toggleLyrics)] retain];
+    _likeButton = [[self buttonWithIcon:@"thumb-up" points:24.0f action:@selector(likePressed)] retain];
+    _dislikeButton = [[self buttonWithIcon:@"thumb-down" points:24.0f action:@selector(dislikePressed)] retain];
 
     _vinyl = [[RewindVinylView alloc] initWithFrame:CGRectZero];
     _vinyl.scratchDelegate = self;
     [self.view addSubview:_vinyl];
-    /* the corner keys stay over the record where a large disc reaches the corners */
-    for (UIView *key in [NSArray arrayWithObjects:_lyricsButton, _moreButton, _repeatButton, _shuffleButton, nil])
-        [self.view bringSubviewToFront:key];
 
     _lyricsPanel = [[UIView alloc] initWithFrame:CGRectZero];
     _lyricsPanel.hidden = YES;
@@ -1100,9 +1095,12 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
     glass.locations = [NSArray arrayWithObjects:@0.0f, @0.48f, @0.52f, @1.0f, nil];
     [_panel.layer addSublayer:glass];
     [self.view addSubview:_panel];
-    _previousButton = [[self buttonWithIcon:@"prev" points:30.0f action:@selector(previousPressed)] retain];
-    _playButton = [[self buttonWithIcon:@"play" points:34.0f action:@selector(playPressed)] retain];
-    _nextButton = [[self buttonWithIcon:@"next" points:30.0f action:@selector(nextPressed)] retain];
+    _previousButton = [[self buttonWithIcon:@"prev" points:36.0f action:@selector(previousPressed)] retain];
+    _playButton = [[self buttonWithIcon:@"play" points:44.0f action:@selector(playPressed)] retain];
+    _nextButton = [[self buttonWithIcon:@"next" points:36.0f action:@selector(nextPressed)] retain];
+    /* repeat and shuffle were made before the slab, which would cover them */
+    [self.view bringSubviewToFront:_repeatButton];
+    [self.view bringSubviewToFront:_shuffleButton];
     _playSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
     _playSpinner.hidesWhenStopped = YES;
     _playSpinner.userInteractionEnabled = NO;
@@ -1134,14 +1132,10 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat fullW = self.view.bounds.size.width, fullH = self.view.bounds.size.height;
-    CGFloat panelH = 60.0f, key = 44.0f, seekH = 28.0f;
+    CGFloat panelH = 64.0f, key = 44.0f, seekH = 34.0f;
     CGFloat titleH = RewindIsPad() ? 30.0f : 25.0f, artistH = RewindIsPad() ? 22.0f : 19.0f;
-    _lyricsButton.frame = CGRectMake(4.0f, 4.0f, key, key);
-    _moreButton.frame = CGRectMake(fullW - key - 4.0f, 4.0f, key, key);
-    _repeatButton.frame = CGRectMake(4.0f, fullH - key - 4.0f, key, key);
-    _shuffleButton.frame = CGRectMake(fullW - key - 4.0f, fullH - key - 4.0f, key, key);
-    CGFloat margin = 10.0f, above = 8.0f;
-    CGFloat below = 8.0f + titleH + artistH + 8.0f + seekH + 8.0f + panelH + margin;
+    CGFloat above = 8.0f;
+    CGFloat below = 8.0f + titleH + artistH + 8.0f + seekH + 18.0f + panelH + 10.0f;
     CGFloat discMax = RewindIsPad() ? 480.0f : fullW - 40.0f;
     CGFloat side = MAX(100.0f, MIN(discMax, fullH - above - below));
     CGFloat column = above + side + below;
@@ -1153,26 +1147,36 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
     _vinyl.bounds = CGRectMake(0.0f, 0.0f, side, side);
     _vinyl.center = CGPointMake(left + side * 0.5f, y + side * 0.5f);
     y += side + 8.0f;
-    _titleLabel.frame = CGRectMake(left, y, side, titleH);
+    /* the names, the track and the transport keys use the width of the screen; the record is limited by height */
+    CGFloat rowW = RewindIsPad() ? MIN(fullW - 48.0f, 560.0f) : fullW - 24.0f, rowLeft = floorf((fullW - rowW) * 0.5f);
+    /* the thumbs flank the two name lines: like on the left, dislike on the right */
+    CGFloat thumbY = y + floorf((titleH + artistH - key) * 0.5f);
+    _likeButton.frame = CGRectMake(rowLeft, thumbY, key, key);
+    _dislikeButton.frame = CGRectMake(rowLeft + rowW - key, thumbY, key, key);
+    CGFloat nameX = rowLeft + key + 4.0f, nameW = rowW - (key + 4.0f) * 2.0f;
+    _titleLabel.frame = CGRectMake(nameX, y, nameW, titleH);
     y += titleH;
-    _artistLabel.frame = CGRectMake(left, y, side, artistH);
+    _artistLabel.frame = CGRectMake(nameX, y, nameW, artistH);
     y += artistH + 8.0f;
     CGFloat seekTop = y;
-    _elapsedLabel.frame = CGRectMake(left, y + 4.0f, 46.0f, 20.0f);
-    _remainingLabel.frame = CGRectMake(left + side - 46.0f, y + 4.0f, 46.0f, 20.0f);
-    _slider.frame = CGRectMake(left + 50.0f, y, side - 100.0f, seekH);
-    y += seekH + 8.0f;
-    /* on a phone the column reaches the bottom corners, so the panel narrows to clear their keys */
-    CGFloat panelW = MIN(side, fullW - (key + 10.0f) * 2.0f);
-    _panel.frame = CGRectMake(floorf((fullW - panelW) * 0.5f), y, panelW, panelH);
+    /* the track is as long as the three transport keys, the times sit under its ends */
+    _slider.frame = CGRectMake(rowLeft, y, rowW, seekH);
+    _elapsedLabel.frame = CGRectMake(rowLeft, y + seekH - 2.0f, 60.0f, 16.0f);
+    _remainingLabel.frame = CGRectMake(rowLeft + rowW - 60.0f, y + seekH - 2.0f, 60.0f, 16.0f);
+    y += seekH + 18.0f;
+    _panel.frame = CGRectMake(rowLeft, y, rowW, panelH);
     /* the lyrics drawer covers the record and the names, down to the seek bar */
     CGRect sheet = CGRectMake(left, discTop, side, MAX(120.0f, seekTop - 6.0f - discTop));
     for (CALayer *layer in _panel.layer.sublayers)
         if ([layer.name isEqualToString:@"glass"]) layer.frame = _panel.bounds;
-    CGFloat third = _panel.bounds.size.width / 3.0f, panelTop = _panel.frame.origin.y;
-    _previousButton.frame = CGRectMake(_panel.frame.origin.x, panelTop, third, panelH);
-    _playButton.frame = CGRectMake(_panel.frame.origin.x + third, panelTop, third, panelH);
-    _nextButton.frame = CGRectMake(_panel.frame.origin.x + third * 2.0f, panelTop, third, panelH);
+    /* shuffle and repeat sit at the ends of the same slab as the three transport keys */
+    CGFloat endW = 56.0f, third = (_panel.bounds.size.width - endW * 2.0f) / 3.0f, panelTop = _panel.frame.origin.y;
+    CGFloat panelX = _panel.frame.origin.x;
+    _shuffleButton.frame = CGRectMake(panelX, panelTop, endW, panelH);
+    _previousButton.frame = CGRectMake(panelX + endW, panelTop, third, panelH);
+    _playButton.frame = CGRectMake(panelX + endW + third, panelTop, third, panelH);
+    _nextButton.frame = CGRectMake(panelX + endW + third * 2.0f, panelTop, third, panelH);
+    _repeatButton.frame = CGRectMake(panelX + endW + third * 3.0f, panelTop, endW, panelH);
     _playSpinner.center = _playButton.center;
     CGFloat sheetH = sheet.size.height;
     if (!_showingLyrics) sheet.origin.y = fullH;
@@ -1392,6 +1396,10 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
         [RewindSheetItem itemWithIcon:@"share" title:RewindL(@"menu_share")
                                 action:^{ [owner performMenuAction:RewindPlayerMenuActionShare]; }], nil]];
     [sheet setItems:[NSArray arrayWithObjects:
+        [RewindSheetItem itemWithIcon:@"queue-add" title:RewindL(@"player_next")
+                                action:^{ [owner performMenuAction:RewindPlayerMenuActionUpNext]; }],
+        [RewindSheetItem itemWithIcon:@"note" title:RewindL(@"player_lyrics")
+                                action:^{ [owner performMenuAction:RewindPlayerMenuActionLyrics]; }],
         [RewindSheetItem itemWithIcon:@"mix" title:RewindL(@"menu_mix")
                                 action:^{ [owner performMenuAction:RewindPlayerMenuActionMix]; }],
         [RewindSheetItem itemWithIcon:@"queue-add" title:RewindL(@"menu_queue")
@@ -1400,8 +1408,6 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
                                 action:^{ [owner performMenuAction:RewindPlayerMenuActionLibrary]; }],
         [RewindSheetItem itemWithIcon:@"download" title:RewindL(@"menu_download")
                                 action:^{ [owner performMenuAction:RewindPlayerMenuActionDownload]; }],
-        [RewindSheetItem itemWithIcon:@"play" title:RewindL(@"watch_video")
-                                action:^{ [owner performMenuAction:RewindPlayerMenuActionVideo]; }],
         [RewindSheetItem itemWithIcon:@"album" title:RewindL(@"menu_album")
                                 action:^{ [owner performMenuAction:RewindPlayerMenuActionAlbum]; }],
         [RewindSheetItem itemWithIcon:@"artist" title:RewindL(@"menu_artist")
@@ -1427,7 +1433,8 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
             break;
         case RewindPlayerMenuActionPlaylist: [self showPlaylistPicker]; break;
         case RewindPlayerMenuActionShare: [self shareTrack:track]; break;
-        case RewindPlayerMenuActionVideo: [self watchVideo:track]; break;
+        case RewindPlayerMenuActionUpNext: [self queuePressed]; break;
+        case RewindPlayerMenuActionLyrics: if (!_showingLyrics) [self toggleLyrics]; break;
         case RewindPlayerMenuActionMix: [self startMix:track]; break;
         case RewindPlayerMenuActionQueue:
             [player enqueueTrack:track usingAPI:api afterCurrent:NO];
@@ -1507,31 +1514,6 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
         [UIPasteboard generalPasteboard].string = url;
         RewindShowToast(self.view, RewindL(@"menu_share_copied"), 24.0f);
     }
-}
-
-/* ios 5 has no AVPlayerLayer path for the video stream that every device can decode, so a missing class hands the
-   watch url to the system */
-- (void)watchVideo:(RewindTrack *)track {
-    RewindAPI *api = _context->api;
-    if (!NSClassFromString(@"AVPlayer") || !NSClassFromString(@"AVPlayerLayer")) {
-        [api musicVideoURLForTrack:track completion:^(NSURL *url, NSError *error) {
-            if (error || !url || ![[UIApplication sharedApplication] openURL:url])
-                RewindShowToast(self.view, error ? RewindFriendlyError(error) : RewindL(@"err_unavailable"), 24.0f);
-        }];
-        return;
-    }
-    RewindShowToast(self.view, RewindL(@"loading_tracks"), 24.0f);
-    [api musicVideoStreamForTrack:track completion:^(NSURL *url, NSError *error) {
-        if (!self.view.window) return;
-        if (!url || error) {
-            RewindShowToast(self.view, error ? RewindFriendlyError(error) : RewindL(@"err_unavailable"), 24.0f);
-            return;
-        }
-        RewindVideoVC *movie = [[[RewindVideoVC alloc] initWithURL:url
-            userAgent:RewindAudioUserAgentForURL(url)] autorelease];
-        if (_context->player.playing) [_context->player toggle];
-        [self presentViewController:movie animated:YES completion:nil];
-    }];
 }
 
 - (void)showPlaylistPicker {
@@ -1652,13 +1634,19 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
     _countLabel.text = count ? [NSString stringWithFormat:RewindL(@"native_track_of"),
                                 (unsigned long)(player.queueIndex + 1), (unsigned long)count] : RewindL(@"playing_now");
     /* while the stream is prepared the spinner takes the glyph's place; the key under it keeps answering */
-    [_playButton setImage:player.loading ? nil : RewindIcon(player.playing ? @"pause" : @"play", 34.0f, [UIColor whiteColor])
+    [_playButton setImage:player.loading ? nil : RewindIcon(player.playing ? @"pause" : @"play", 44.0f, [UIColor whiteColor])
                  forState:UIControlStateNormal];
     UIColor *on = RewindColorLink();
     [_repeatButton setImage:RewindIcon(player.repeating ? @"repeat-one" : @"repeat", 24.0f,
                                        player.repeating ? on : [UIColor whiteColor]) forState:UIControlStateNormal];
     [_shuffleButton setImage:RewindIcon(@"shuffle", 24.0f, player.shuffling ? on : [UIColor whiteColor])
                     forState:UIControlStateNormal];
+    BOOL liked = track && (RewindAccountIsSignedIn() ? RewindAccountTrackIsLiked(track) : RewindTrackIsSaved(track));
+    BOOL disliked = track && RewindAccountTrackIsDisliked(track);
+    [_likeButton setImage:RewindIcon(liked ? @"thumb-up-on" : @"thumb-up", 24.0f, liked ? on : [UIColor whiteColor])
+                 forState:UIControlStateNormal];
+    [_dislikeButton setImage:RewindIcon(disliked ? @"thumb-down-on" : @"thumb-down", 24.0f,
+                                        disliked ? on : [UIColor whiteColor]) forState:UIControlStateNormal];
     NSString *url = track.thumbnailURL;
     if (![url isEqualToString:_artworkURL ?: @""]) {
         [_artworkURL release];
@@ -1685,12 +1673,46 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
     [self tick:nil];
 }
 
+- (void)likePressed {
+    RewindTrack *track = _context->player.track;
+    if (!track) return;
+    if (!RewindAccountIsSignedIn()) {
+        /* signed out, the thumb keeps the local library, the only place a like can go */
+        if (RewindTrackIsSaved(track)) RewindRemoveTrack(track);
+        else RewindSaveTrack(track);
+        [self refresh:nil];
+        return;
+    }
+    RewindAccountSetLiked(track, !RewindAccountTrackIsLiked(track), ^(NSError *error) {
+        if (error) RewindShowToast(self.view, RewindFriendlyError(error), 24.0f);
+        [self refresh:nil];
+    });
+}
+
+- (void)dislikePressed {
+    RewindTrack *track = _context->player.track;
+    if (!track) return;
+    if (!RewindAccountIsSignedIn()) {
+        RewindShowToast(self.view, RewindL(@"dislike_sign_in"), 24.0f);
+        return;
+    }
+    BOOL disliked = !RewindAccountTrackIsDisliked(track);
+    RewindAccountSetDisliked(track, disliked, ^(NSError *error) {
+        if (error) RewindShowToast(self.view, RewindFriendlyError(error), 24.0f);
+        else if (disliked) RewindShowToast(self.view, RewindL(@"dislike_done"), 24.0f);
+        [self refresh:nil];
+    });
+}
+
 - (void)vinylScratchBegan {
     _dragging = YES;
     [_context->player beginScratch];
 }
 
 - (void)vinylScratchedByRadians:(CGFloat)radians interval:(NSTimeInterval)interval {
+    /* a scratch that crosses the end of a track loses its hold when the next track replaces the player, and
+       the finger is still down; take the new track over on the next move, begin waits for its player */
+    if (!_context->player.scratching) [_context->player beginScratch];
     [_context->player scratchByTime:radians / (CGFloat)(M_PI * 2.0) * 1.8 interval:interval];
     /* the slider and the clock follow the finger, a full refresh per touch would be too heavy */
     NSTimeInterval duration = _context->player.duration, current = _context->player.currentTime;

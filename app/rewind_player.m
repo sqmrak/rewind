@@ -62,6 +62,11 @@ static void RewindConfigureAudioSession(void) {
         RewindDebugLog(@"audio session activation failed: %@", sessionError);
 }
 
+/* the lock screen replaces the whole info dictionary on every set, so the cover has to be written again with
+   each update or the next state change wipes it; one player exists per process */
+static MPMediaItemArtwork *RewindNowPlayingArtwork = nil;
+static NSString *RewindNowPlayingArtworkID = nil;
+
 static void RewindUpdateNowPlaying(RewindPlayer *player) {
     Class centerClass = NSClassFromString(@"MPNowPlayingInfoCenter");
     if (!centerClass) return;
@@ -75,22 +80,24 @@ static void RewindUpdateNowPlaying(RewindPlayer *player) {
     }
 
     NSMutableDictionary *info = [NSMutableDictionary dictionary];
-    if (track.title.length) [info setObject:track.title forKey:@"title"];
+    if (track.title.length) [info setObject:track.title forKey:MPMediaItemPropertyTitle];
     if (track.artist.length)
-        [info setObject:RewindTrackArtistText(track) forKey:@"artist"];
-    if (track.album.length) [info setObject:track.album forKey:@"albumTitle"];
+        [info setObject:RewindTrackArtistText(track) forKey:MPMediaItemPropertyArtist];
+    if (track.album.length) [info setObject:track.album forKey:MPMediaItemPropertyAlbumTitle];
     NSTimeInterval duration = [player duration];
     if (duration > 0.0) {
-        [info setObject:[NSNumber numberWithDouble:duration] forKey:@"playbackDuration"];
+        [info setObject:[NSNumber numberWithDouble:duration] forKey:MPMediaItemPropertyPlaybackDuration];
         [info setObject:[NSNumber numberWithDouble:[player currentTime]]
-                 forKey:@"elapsedPlaybackTime"];
+                 forKey:MPNowPlayingInfoPropertyElapsedPlaybackTime];
     }
-    [info setObject:[NSNumber numberWithFloat:player.isPlaying ? 1.0f : 0.0f]
-             forKey:@"playbackRate"];
+    [info setObject:[NSNumber numberWithDouble:player.isPlaying ? 1.0 : 0.0]
+             forKey:MPNowPlayingInfoPropertyPlaybackRate];
     if (player.queue.count) {
         [info setObject:[NSNumber numberWithUnsignedInteger:player.queue.count]
-                 forKey:@"playbackQueueCount"];
+                 forKey:MPNowPlayingInfoPropertyPlaybackQueueCount];
     }
+    if (RewindNowPlayingArtwork && [RewindNowPlayingArtworkID isEqualToString:track.videoID ?: @""])
+        [info setObject:RewindNowPlayingArtwork forKey:MPMediaItemPropertyArtwork];
     [center setValue:info forKey:@"nowPlayingInfo"];
 }
 
@@ -100,20 +107,13 @@ static void RewindUpdateNowPlayingArtwork(RewindPlayer *player, RewindTrack *tra
     NSString *requestedURL = [track.thumbnailURL copy];
     RewindLoadImage(requestedURL, ^(UIImage *image) {
         if (!image || player.track != track || generation == 0) return;
-        Class centerClass = NSClassFromString(@"MPNowPlayingInfoCenter");
-        if (![MPMediaItemArtwork class] || !centerClass) return;
         MPMediaItemArtwork *artwork = RewindArtworkForImage(image);
-        id center = [centerClass performSelector:@selector(defaultCenter)];
-        if (!artwork || !center || player.track != track) {
-            [artwork release];
-            return;
-        }
-        NSMutableDictionary *info = [[[center valueForKey:@"nowPlayingInfo"] mutableCopy]
-                                     autorelease];
-        if (!info) info = [NSMutableDictionary dictionary];
-        [info setObject:artwork forKey:@"artwork"];
-        [center setValue:info forKey:@"nowPlayingInfo"];
-        [artwork release];
+        if (!artwork) return;
+        [RewindNowPlayingArtwork release];
+        RewindNowPlayingArtwork = artwork;
+        [RewindNowPlayingArtworkID release];
+        RewindNowPlayingArtworkID = [track.videoID ?: @"" copy];
+        RewindUpdateNowPlaying(player);
     });
     [requestedURL release];
 }
@@ -213,6 +213,8 @@ static void RewindPlaybackTick(CFRunLoopTimerRef timer, void *context) {
     for (NSUInteger index = 0; index < commands.count; ++index) {
         id command = [center valueForKey:[commands objectAtIndex:index]];
         if (!command) continue;
+        /* lock screen and control center hide a command until it is enabled; next and previous start disabled */
+        [command setValue:[NSNumber numberWithBool:registered] forKey:@"enabled"];
         if (!registered) {
             if ([command respondsToSelector:remove]) [command performSelector:remove withObject:self];
         } else if ([command respondsToSelector:add]) {
@@ -260,6 +262,7 @@ static void RewindPlaybackTick(CFRunLoopTimerRef timer, void *context) {
 - (float)playbackRate { return _playbackRate; }
 - (NSInteger)queueIndex { return _queueIndex; }
 - (BOOL)isShuffling { return _shuffling; }
+- (BOOL)isScratching { return _scratching; }
 - (id)nativePlayer { return _player; }
 
 - (BOOL)isPlaying {
@@ -1109,7 +1112,8 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
     if (_scratching || ![_player isKindOfClass:[AVPlayer class]]) return;
     AVPlayer *player = _player;
     _scratching = YES;
-    _scratchWasPlaying = _wantsPlayback && player.rate > 0.0f;
+    /* a record taken over before the next track reports ready has rate 0 and still means to play */
+    _scratchWasPlaying = _wantsPlayback && (player.rate > 0.0f || !_playbackStarted);
     _scratchTarget = [self currentTime];
     _scratchVelocity = 0.0f;
     _scratchSeeking = NO;

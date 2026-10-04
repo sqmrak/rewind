@@ -23,7 +23,8 @@ typedef enum {
     RewindPlayerMenuActionClearQueue,
     RewindPlayerMenuActionSpeed,
     RewindPlayerMenuActionSleep,
-    RewindPlayerMenuActionVideo
+    RewindPlayerMenuActionLyrics,
+    RewindPlayerMenuActionUpNext
 } RewindPlayerMenuAction;
 
 @class RewindArtworkView;

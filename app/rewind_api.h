@@ -101,6 +101,8 @@ typedef enum {
 @property(nonatomic, readonly) NSString *caption;
 @property(nonatomic, readonly) NSArray *items;
 @property(nonatomic, readonly) RewindShelfStyle style;
+/* a shelf of music clips; youtube words its title differently per language, so the items decide */
+@property(nonatomic, readonly, getter=isVideoLineup) BOOL videoLineup;
 - (id)initWithTitle:(NSString *)title items:(NSArray *)items;
 - (id)initWithTitle:(NSString *)title caption:(NSString *)caption items:(NSArray *)items
               style:(RewindShelfStyle)style;
@@ -199,10 +201,6 @@ typedef void (^RewindLyricsCompletion)(RewindLyrics *lyrics, NSError *error);
 /* one line in, one line out; the completion gets nil lines and an error when the counts differ */
 - (void)translateLines:(NSArray *)lines toLanguage:(NSString *)language completion:(RewindTranslateCompletion)completion;
 - (void)relatedForTrack:(RewindTrack *)track completion:(RewindShelvesCompletion)completion;
-/* a range-validated progressive H.264/AAC MP4 for the exact counterpart */
-- (void)musicVideoStreamForTrack:(RewindTrack *)track completion:(RewindAudioCompletion)completion;
-/* a youtube watch link for a Video result or its exact song/video counterpart */
-- (void)musicVideoURLForTrack:(RewindTrack *)track completion:(RewindAudioCompletion)completion;
 
 @end
 

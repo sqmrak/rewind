@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ru</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Rewind</string>
 	<key>CFBundleExecutable</key>
@@ -20,18 +27,39 @@
 	<string>1.0.0-stable</string>
 	<key>CFBundleVersion</key>
 	<string>1005</string>
-	<key>CFBundleIconFiles</key>
-	<array>
-		<string>RewindIcon.png</string>
-		<string>RewindIcon@2x.png</string>
-		<string>RewindIcon-72.png</string>
-		<string>RewindIcon-72@2x.png</string>
-		<string>RewindIcon-60@2x.png</string>
-		<string>RewindIcon-60@3x.png</string>
-		<string>RewindIcon-76.png</string>
-		<string>RewindIcon-76@2x.png</string>
-		<string>RewindIcon-83.5@2x.png</string>
-	</array>
+	<!-- the iphone and ipad lists are separate: ios 5 and 6 pick the listed file closest to the wanted size, and an
+	     iphone 4s took the square ipad file from one shared list -->
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>RewindIcon.png</string>
+				<string>RewindIcon@2x.png</string>
+				<string>RewindIcon-60@2x.png</string>
+				<string>RewindIcon-60@3x.png</string>
+			</array>
+			<key>UIPrerenderedIcon</key>
+			<true/>
+		</dict>
+	</dict>
+	<key>CFBundleIcons~ipad</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>RewindIcon-72.png</string>
+				<string>RewindIcon-72@2x.png</string>
+				<string>RewindIcon-76.png</string>
+				<string>RewindIcon-76@2x.png</string>
+				<string>RewindIcon-83.5@2x.png</string>
+			</array>
+			<key>UIPrerenderedIcon</key>
+			<true/>
+		</dict>
+	</dict>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Roboto-Regular.ttf</string>

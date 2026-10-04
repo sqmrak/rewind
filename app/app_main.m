@@ -109,6 +109,19 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     [self updateIdleTimer];
 }
 
+/* ios 5 through 7.0 deliver lock screen and headset keys to the first responder and then up the chain; no
+   screen holds the focus, so the delegate at the end of the chain takes them for every theme and screen */
+- (void)remoteControlReceivedWithEvent:(UIEvent *)event {
+    if (event.type != UIEventTypeRemoteControl) return;
+    switch (event.subtype) {
+        case UIEventSubtypeRemoteControlPlay: case UIEventSubtypeRemoteControlPause:
+        case UIEventSubtypeRemoteControlTogglePlayPause: [RewindAppPlayer toggle]; break;
+        case UIEventSubtypeRemoteControlNextTrack: [RewindAppPlayer nextTrack]; break;
+        case UIEventSubtypeRemoteControlPreviousTrack: [RewindAppPlayer previousTrack]; break;
+        default: break;
+    }
+}
+
 - (void)applicationWillResignActive:(UIApplication *)application {
     application.idleTimerDisabled = NO;
 }

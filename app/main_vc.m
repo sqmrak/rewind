@@ -36,19 +36,6 @@ static UILabel *RewindLabel(CGFloat size, RewindWeight weight, UIColor *color) {
     return label;
 }
 
-/* the music video lineup is clips, which the audio player plays badly as songs; youtube
-   words its title differently per language, so it is recognised by its items. explore keeps them,
-   its trending and new clips shelves are made of them */
-static BOOL RewindShelfIsVideoLineup(RewindShelf *shelf) {
-    NSUInteger videos = 0, total = 0;
-    for (id item in shelf.items) {
-        if (![item isKindOfClass:[RewindTrack class]]) continue;
-        ++total;
-        if ([((RewindTrack *)item).resultType isEqualToString:@"Video"]) ++videos;
-    }
-    return total >= 3 && videos * 10 >= total * 8;
-}
-
 static NSUInteger RewindTrackCount(NSArray *items) {
     NSUInteger count = 0;
     for (id item in items) if ([item isKindOfClass:[RewindTrack class]]) ++count;
@@ -56,7 +43,7 @@ static NSUInteger RewindTrackCount(NSArray *items) {
 }
 static RewindShelf *RewindFirstSongShelf(NSArray *shelves, RewindShelf *skip) {
     for (RewindShelf *shelf in shelves) {
-        if (shelf == skip || RewindShelfIsVideoLineup(shelf)) continue;
+        if (shelf == skip || shelf.videoLineup) continue;
         NSUInteger playable = 0;
         for (id item in shelf.items) {
             if ([item isKindOfClass:[RewindTrack class]] &&
@@ -861,8 +848,7 @@ static UIImage *RewindAmbientImage(CGSize size, CGFloat hueA, CGFloat hueB) {
               skipOther:(RewindShelf *)other fromY:(CGFloat)y width:(CGFloat)width {
     NSMutableArray *pending = [NSMutableArray array];
     for (RewindShelf *shelf in shelves)
-        if (shelf != skip && shelf != other && shelf.items.count &&
-            (_selectedTab == RewindTabExplore || !RewindShelfIsVideoLineup(shelf)))
+        if (shelf != skip && shelf != other && shelf.items.count && !shelf.videoLineup)
             [pending addObject:shelf];
     [_pendingShelves release];
     _pendingShelves = [pending copy];
@@ -1700,19 +1686,6 @@ static UIImage *RewindAmbientImage(CGSize size, CGFloat hueA, CGFloat hueB) {
                                                       : RewindL(@"menu_download_done"), RewindBottomHeight());
         });
     }];
-}
-
-- (BOOL)canBecomeFirstResponder { return YES; }
-
-- (void)remoteControlReceivedWithEvent:(UIEvent *)event {
-    if (event.type != UIEventTypeRemoteControl) return;
-    switch (event.subtype) {
-        case UIEventSubtypeRemoteControlPlay: case UIEventSubtypeRemoteControlPause:
-        case UIEventSubtypeRemoteControlTogglePlayPause: [_player toggle]; break;
-        case UIEventSubtypeRemoteControlNextTrack: [_player nextTrack]; break;
-        case UIEventSubtypeRemoteControlPreviousTrack: [_player previousTrack]; break;
-        default: break;
-    }
 }
 
 @end

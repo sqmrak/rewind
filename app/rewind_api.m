@@ -33,8 +33,6 @@ static NSString * const RewindAndroidClientName = @"ANDROID";
 static NSString * const RewindAndroidClientVersion = @"21.26.364";
 static NSString * const RewindAndroidMusicClientName = @"ANDROID_MUSIC";
 static NSString * const RewindAndroidMusicClientVersion = @"7.27.52";
-static NSString * const RewindAndroidVRClientName = @"ANDROID_VR";
-static NSString * const RewindAndroidVRClientVersion = @"1.65.10";
 @implementation RewindAudioRequest
 @synthesize upgradeExpected = _upgradeExpected;
 - (void)dealloc {
@@ -1396,6 +1394,16 @@ NSString * const RewindResultTypeArtist = @"Artist";
 @synthesize items = _items;
 @synthesize style = _style;
 
+- (BOOL)isVideoLineup {
+    NSUInteger videos = 0, total = 0;
+    for (id item in _items) {
+        if (![item isKindOfClass:[RewindTrack class]]) continue;
+        ++total;
+        if ([((RewindTrack *)item).resultType isEqualToString:@"Video"]) ++videos;
+    }
+    return total >= 3 && videos * 10 >= total * 8;
+}
+
 - (id)initWithTitle:(NSString *)title items:(NSArray *)items {
     return [self initWithTitle:title caption:nil items:items style:RewindShelfStyleCards];
 }
@@ -1897,41 +1905,6 @@ static NSArray *RewindAudioCandidates(id root, NSString *clientName, NSSet *excl
             [candidates insertObject:candidate atIndex:0];
             break;
         }
-    }
-    return candidates;
-}
-
-static NSArray *RewindMusicVideoCandidates(id root, NSString *clientName) {
-    NSDictionary *streaming = RewindDict([RewindDict(root) objectForKey:@"streamingData"]);
-    NSMutableArray *formats = [NSMutableArray array];
-    for (id value in RewindArray([streaming objectForKey:@"formats"])) {
-        NSDictionary *format = RewindDict(value);
-        NSString *mime = RewindString([format objectForKey:@"mimeType"]);
-        NSString *urlString = RewindString([format objectForKey:@"url"]);
-        if (!urlString.length || urlString.length > 8192 || !mime.length || mime.length > 256) continue;
-        NSURL *url = [NSURL URLWithString:urlString];
-        uint64_t itag = 0;
-        /* ios 5 needs muxed H.264 and AAC, adaptive video has no sound */
-        if (![mime hasPrefix:@"video/mp4;"] ||
-            [mime rangeOfString:@"avc1."].location == NSNotFound ||
-            [mime rangeOfString:@"mp4a.40.2"].location == NSNotFound ||
-            ![@"https" isEqualToString:[url.scheme lowercaseString]] ||
-            ![[url.host lowercaseString] hasSuffix:@".googlevideo.com"] ||
-            url.user.length || url.password.length || url.fragment.length ||
-            [format objectForKey:@"drmFamilies"] || [format objectForKey:@"signatureCipher"] ||
-            [format objectForKey:@"cipher"] || [format objectForKey:@"indexRange"] ||
-            !RewindUnsigned([format objectForKey:@"itag"], &itag) || !itag || itag > INT32_MAX) continue;
-        [formats addObject:format];
-    }
-    [formats sortUsingComparator:^NSComparisonResult(id a, id b) {
-        uint64_t x = RewindFormatBitrate(a), y = RewindFormatBitrate(b);
-        return x < y ? NSOrderedAscending : (x > y ? NSOrderedDescending : NSOrderedSame);
-    }];
-    NSMutableArray *candidates = [NSMutableArray array];
-    for (NSDictionary *format in formats) {
-        if (candidates.count >= 3) break;
-        NSString *key = [NSString stringWithFormat:@"%@:video:%@", clientName, [format objectForKey:@"itag"]];
-        [candidates addObject:[NSDictionary dictionaryWithObjectsAndKeys:format, @"format", key, @"key", nil]];
     }
     return candidates;
 }
@@ -2507,7 +2480,7 @@ static void RewindTryAudioCandidate(NSArray *candidates, NSUInteger index, NSStr
 static void RewindAudioURLWithPlayerClient(NSString *videoID, NSString *apiKey,
                                           NSString *clientName, NSString *clientVersion,
                                           NSString *clientHeaderName, NSString *userAgent,
-                                          BOOL stream, NSSet *excluded, BOOL musicVideo, RewindAudioRequest *audioRequest,
+                                          BOOL stream, NSSet *excluded, RewindAudioRequest *audioRequest,
                                           RewindAudioCompletion completion) {
     NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
                           RewindPlayerContext(clientName, clientVersion), @"context",
@@ -2536,18 +2509,13 @@ static void RewindAudioURLWithPlayerClient(NSString *videoID, NSString *apiKey,
         if (![status isEqualToString:@"OK"]) {
             BOOL login = [status isEqualToString:@"LOGIN_REQUIRED"];
             BOOL bot = login && reason.length && [reason rangeOfString:@"bot" options:NSCaseInsensitiveSearch].location != NSNotFound;
-            completion(nil, RewindError(bot ? 22 : (login ? 23 : (musicVideo ? 25 : 8)), reason ?: @"player returned no playable audio"));
-            return;
-        }
-        if (musicVideo && ![RewindString([RewindDict([RewindDict(root) objectForKey:@"videoDetails"])
-                                               objectForKey:@"videoId"]) isEqualToString:videoID]) {
-            completion(nil, RewindError(8, @"player returned a different music video"));
+            completion(nil, RewindError(bot ? 22 : (login ? 23 : 8), reason ?: @"player returned no playable audio"));
             return;
         }
         NSString *sourceClient = [NSString stringWithFormat:@"%@:%@", clientName, clientVersion];
         /* this client lists an hls manifest next to sabr, and a validated manifest would win before sabr is tried */
         NSString *sabrSourceKey = [sourceClient stringByAppendingString:@":sabr"];
-        if (!musicVideo && stream && [clientVersion isEqualToString:RewindIOSSABRClientVersion] &&
+        if (stream && [clientVersion isEqualToString:RewindIOSSABRClientVersion] &&
             ![excluded containsObject:sabrSourceKey] &&
             RewindString([RewindDict([RewindDict(root) objectForKey:@"streamingData"]) objectForKey:@"serverAbrStreamingUrl"]).length) {
             RewindSABRAudioURL(root, clientName, clientVersion, clientHeaderName, userAgent, audioRequest,
@@ -2557,8 +2525,7 @@ static void RewindAudioURLWithPlayerClient(NSString *videoID, NSString *apiKey,
             });
             return;
         }
-        NSArray *candidates = musicVideo ? RewindMusicVideoCandidates(root, sourceClient)
-                                        : RewindAudioCandidates(root, sourceClient, excluded, stream);
+        NSArray *candidates = RewindAudioCandidates(root, sourceClient, excluded, stream);
         RewindTryAudioCandidate(candidates, 0, userAgent, stream, nil, audioRequest, ^(NSURL *url, NSError *failure) {
             if (url) {
                 completion(url, nil);
@@ -2566,7 +2533,7 @@ static void RewindAudioURLWithPlayerClient(NSString *videoID, NSString *apiKey,
             }
             NSString *sabrKey = [sourceClient stringByAppendingString:@":sabr"];
             NSDictionary *streaming = RewindDict([RewindDict(root) objectForKey:@"streamingData"]);
-            if (!musicVideo && stream && [clientVersion isEqualToString:RewindIOSSABRClientVersion] &&
+            if (stream && [clientVersion isEqualToString:RewindIOSSABRClientVersion] &&
                 ![excluded containsObject:sabrKey] &&
                 RewindString([streaming objectForKey:@"serverAbrStreamingUrl"]).length) {
                 RewindSABRAudioURL(root, clientName, clientVersion, clientHeaderName, userAgent, audioRequest,
@@ -2575,7 +2542,7 @@ static void RewindAudioURLWithPlayerClient(NSString *videoID, NSString *apiKey,
                     completion(local, local ? nil : (sabrError ?: failure));
                 });
             } else {
-                completion(nil, failure ?: RewindError(8, musicVideo ? @"player has no accessible progressive music video" : @"player has no accessible AAC source"));
+                completion(nil, failure ?: RewindError(8, @"player has no accessible AAC source"));
             }
         });
     });
@@ -2583,18 +2550,18 @@ static void RewindAudioURLWithPlayerClient(NSString *videoID, NSString *apiKey,
 
 /* plain playback asks android first: its progressive file is the one source that delivers a whole track
    (sabr stops answering with media after the first minute without a po token), and it is one player request
-   and one probe. sabr follows only when android fails. downloads and music videos need plain urls, so their
-   clients race and the first to deliver cancels the rest; vr only joins for music videos */
+   and one probe. sabr follows only when android fails. downloads need plain urls, so their clients race and
+   the first to deliver cancels the rest */
 static void RewindResolveAudioClients(NSString *videoID, NSString *apiKey, BOOL stream, NSSet *excluded,
-                                      BOOL musicVideo, RewindAudioRequest *audioRequest, RewindAudioCompletion completion) {
+                                      RewindAudioRequest *audioRequest, RewindAudioCompletion completion) {
     if (audioRequest.cancelled) return;
-    if (stream && !musicVideo) {
+    if (stream) {
         NSString *androidAgent = [[RewindPlayerContext(RewindAndroidClientName, RewindAndroidClientVersion)
                                    objectForKey:@"client"] objectForKey:@"userAgent"];
         NSString *sabrAgent = [[RewindPlayerContext(RewindIOSClientName, RewindIOSSABRClientVersion)
                                 objectForKey:@"client"] objectForKey:@"userAgent"];
         RewindAudioURLWithPlayerClient(videoID, apiKey, RewindAndroidClientName, RewindAndroidClientVersion, @"3",
-                                      androidAgent, stream, excluded, musicVideo, audioRequest,
+                                      androidAgent, stream, excluded, audioRequest,
                                       ^(NSURL *url, NSError *error) {
             if (url || audioRequest.cancelled) {
                 completion(url, error);
@@ -2602,7 +2569,7 @@ static void RewindResolveAudioClients(NSString *videoID, NSString *apiKey, BOOL 
             }
             RewindDebugLog(@"android audio failed for %@, trying sabr: %@", videoID, error);
             RewindAudioURLWithPlayerClient(videoID, apiKey, RewindIOSClientName, RewindIOSSABRClientVersion, @"5",
-                                          sabrAgent, stream, excluded, musicVideo, audioRequest, completion);
+                                          sabrAgent, stream, excluded, audioRequest, completion);
         });
         return;
     }
@@ -2613,11 +2580,6 @@ static void RewindResolveAudioClients(NSString *videoID, NSString *apiKey, BOOL 
     [names addObject:RewindAndroidClientName];
     [versions addObject:RewindAndroidClientVersion];
     [headers addObject:@"3"];
-    if (musicVideo) {
-        [names addObject:RewindAndroidVRClientName];
-        [versions addObject:RewindAndroidVRClientVersion];
-        [headers addObject:@"28"];
-    }
     NSUInteger count = names.count;
     NSMutableArray *branches = [NSMutableArray arrayWithCapacity:count];
     NSMutableArray *errors = [NSMutableArray arrayWithCapacity:count];
@@ -2632,15 +2594,13 @@ static void RewindResolveAudioClients(NSString *videoID, NSString *apiKey, BOOL 
         NSString *userAgent = [[RewindPlayerContext(name, version) objectForKey:@"client"] objectForKey:@"userAgent"];
         RewindAudioRequest *branch = [branches objectAtIndex:i];
         RewindAudioURLWithPlayerClient(videoID, apiKey, name, version, [headers objectAtIndex:i], userAgent,
-                                      stream, excluded, musicVideo, branch, ^(NSURL *url, NSError *error) {
+                                      stream, excluded, branch, ^(NSURL *url, NSError *error) {
             if (settled || audioRequest.cancelled) return;
-            BOOL fatal = !url && musicVideo && [error.domain isEqualToString:RewindErrorDomain] &&
-                         (error.code == 22 || error.code == 23 || error.code == 25);
             if (url) {
                 audioRequest.upgradeExpected = branch.upgradeExpected;
             } else {
                 if (error) [errors replaceObjectAtIndex:i withObject:error];
-                if (!fatal && --pending) return;
+                if (--pending) return;
             }
             settled = YES;
             for (RewindAudioRequest *other in branches) if (other != branch) [other cancel];
@@ -2648,9 +2608,9 @@ static void RewindResolveAudioClients(NSString *videoID, NSString *apiKey, BOOL 
                 completion(url, nil);
                 return;
             }
-            NSError *reported = fatal ? error : nil;
+            NSError *reported = nil;
             for (id value in errors) if (!reported && value != [NSNull null]) reported = value;
-            completion(nil, reported ?: RewindError(8, musicVideo ? @"no accessible progressive music video" : @"no accessible audio source"));
+            completion(nil, reported ?: RewindError(8, @"no accessible audio source"));
         });
     }
 }
@@ -2742,7 +2702,7 @@ static void RewindAudioURLWithPublicServer(NSString *videoID, BOOL stream, NSSet
 static void RewindResolveAudio(NSString *videoID, NSString *apiKey, BOOL stream, NSSet *excluded,
                                RewindAudioRequest *audioRequest, RewindAudioCompletion completion) {
     /* public Googlevideo links return 403 on the device even when the server API returns JSON */
-    RewindResolveAudioClients(videoID, apiKey, stream, excluded, NO, audioRequest, ^(NSURL *url, NSError *error) {
+    RewindResolveAudioClients(videoID, apiKey, stream, excluded, audioRequest, ^(NSURL *url, NSError *error) {
         if (audioRequest.cancelled) return;
         if (url) completion(url, nil);
         else {
@@ -3070,72 +3030,6 @@ static RewindLyrics *RewindPlainLyrics(NSDictionary *root) {
             }
             completion(failure ? nil : bounded, chips, failure);
         }];
-    }];
-}
-
-static NSString *RewindMusicVideoCounterpart(id root, NSString *videoID) {
-    if (!rewind_audio_video_id([videoID UTF8String])) return nil;
-    NSMutableArray *wrappers = [NSMutableArray array];
-    RewindCollectValuesForKey(root, @"playlistPanelVideoWrapperRenderer", wrappers, 0);
-    for (id value in wrappers) {
-        NSDictionary *wrapper = RewindDict(value);
-        NSDictionary *primary = RewindDict([RewindDict([wrapper objectForKey:@"primaryRenderer"])
-                                            objectForKey:@"playlistPanelVideoRenderer"]);
-        if (![RewindString([primary objectForKey:@"videoId"]) isEqualToString:videoID]) continue;
-        for (id item in RewindArray([wrapper objectForKey:@"counterpart"])) {
-            NSDictionary *video = RewindDict([RewindDict([RewindDict(item) objectForKey:@"counterpartRenderer"])
-                                              objectForKey:@"playlistPanelVideoRenderer"]);
-            NSString *counterpartID = RewindString([video objectForKey:@"videoId"]);
-            NSString *type = RewindString(RewindFindValueForKey(video, @"musicVideoType", 0));
-            if (([type isEqualToString:@"MUSIC_VIDEO_TYPE_OMV"] ||
-                 [type isEqualToString:@"MUSIC_VIDEO_TYPE_UGC"] ||
-                 [type isEqualToString:@"MUSIC_VIDEO_TYPE_OFFICIAL_SOURCE"]) &&
-                ![video objectForKey:@"unplayableText"] &&
-                rewind_audio_video_id([counterpartID UTF8String])) return counterpartID;
-        }
-    }
-    return nil;
-}
-
-- (void)musicVideoURLForTrack:(RewindTrack *)track completion:(RewindAudioCompletion)completion {
-    if (!completion) return;
-    if (![NSThread isMainThread]) {
-        dispatch_async(dispatch_get_main_queue(), ^{ [self musicVideoURLForTrack:track completion:completion]; });
-        return;
-    }
-    if (!rewind_audio_video_id([track.videoID UTF8String])) {
-        completion(nil, RewindError(6, @"track has no valid video id"));
-        return;
-    }
-    if ([track.resultType isEqualToString:@"Video"]) {
-        completion([NSURL URLWithString:[@"https://www.youtube.com/watch?v=" stringByAppendingString:track.videoID]], nil);
-        return;
-    }
-    RewindWebCall(@"next", _apiKey, RewindWatchFields(track), ^(NSDictionary *root, NSError *error) {
-        NSString *videoID = error ? nil : RewindMusicVideoCounterpart(root, track.videoID);
-        if (videoID) {
-            completion([NSURL URLWithString:[@"https://www.youtube.com/watch?v=" stringByAppendingString:videoID]], nil);
-            return;
-        }
-        completion(nil, error ?: RewindError(19, @"track has no music video counterpart"));
-    });
-}
-
-- (void)musicVideoStreamForTrack:(RewindTrack *)track completion:(RewindAudioCompletion)completion {
-    if (!completion) return;
-    if (![NSThread isMainThread]) {
-        dispatch_async(dispatch_get_main_queue(), ^{ [self musicVideoStreamForTrack:track completion:completion]; });
-        return;
-    }
-    NSString *apiKey = [[_apiKey copy] autorelease];
-    [self musicVideoURLForTrack:track completion:^(NSURL *watchURL, NSError *error) {
-        if (!watchURL) {
-            completion(nil, error);
-            return;
-        }
-        NSString *videoID = [watchURL.query substringFromIndex:2];
-        RewindResolveAudioClients(videoID, apiKey, NO, nil, YES,
-                                 [[[RewindAudioRequest alloc] init] autorelease], completion);
     }];
 }
 
