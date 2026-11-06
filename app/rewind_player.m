@@ -47,6 +47,15 @@ static MPMediaItemArtwork *RewindArtworkForImage(UIImage *image) {
     return [[MPMediaItemArtwork alloc] initWithImage:image];
 }
 
+/* the session answers over xpc to the media server, which on some phones keeps it waiting for tens of seconds: the calls go to a queue of their own, so the screen and the
+   timers of the resolver never wait for them */
+static dispatch_queue_t RewindAudioSessionQueue(void) {
+    static dispatch_queue_t queue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ queue = dispatch_queue_create("com.sqmrak.rewind.audiosession", DISPATCH_QUEUE_SERIAL); });
+    return queue;
+}
+
 static void RewindConfigureAudioSession(void) {
     NSError *sessionError = nil;
     AVAudioSession *session = [AVAudioSession sharedInstance];
@@ -60,6 +69,15 @@ static void RewindConfigureAudioSession(void) {
     sessionError = nil;
     if (![session setActive:YES error:&sessionError])
         RewindDebugLog(@"audio session activation failed: %@", sessionError);
+}
+
+static void RewindConfigureAudioSessionAsync(void) {
+    dispatch_async(RewindAudioSessionQueue(), ^{ RewindConfigureAudioSession(); });
+}
+
+/* a file is handed to avplayer at once, so its category has to be in place before; the queue keeps the order of the calls */
+static void RewindConfigureAudioSessionNow(void) {
+    dispatch_sync(RewindAudioSessionQueue(), ^{ RewindConfigureAudioSession(); });
 }
 
 /* the lock screen replaces the whole info dictionary on every set, so the cover has to be written again with
@@ -307,6 +325,7 @@ static void RewindPlaybackTick(CFRunLoopTimerRef timer, void *context) {
 - (void)dealloc {
     [self clearPrefetch];
     [self clearPlaybackTimer];
+    if (_audioRequest) RewindDebugLog(@"audio request of %@ cancelled: player released", _track.videoID);
     [_audioRequest cancel];
     [_audioRequest release];
     [_failedAudioSources release];
@@ -337,7 +356,7 @@ static void RewindPlaybackTick(CFRunLoopTimerRef timer, void *context) {
 
 - (void)backgroundAudioChanged:(NSNotification *)note {
     (void)note;
-    if (_player) RewindConfigureAudioSession();
+    if (_player) RewindConfigureAudioSessionAsync();
 }
 
 - (void)clearNativePlayer {
@@ -471,6 +490,7 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL);
     _prefetchScheduled = NO;
     ++_generation;
     _loadingMore = NO;
+    if (_audioRequest) RewindDebugLog(@"audio request of %@ cancelled: another track was chosen", _track.videoID);
     [_audioRequest cancel];
     [_audioRequest release];
     _audioRequest = nil;
@@ -661,8 +681,6 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
     _audioFailed = NO;
     /* each resolver stage has its own deadline; 45s cancelled working Android fallback on ios 5 */
     [self setLoadTimeout:0];
-    RewindPlayerNotify(self, nil);
-    RewindConfigureAudioSession();
     RewindTrack *selectedTrack = _track;
     void (^resolved)(NSURL *, NSError *) = ^(NSURL *audioURL, NSError *audioError) {
         if (generation != _generation || attempt != _audioAttempt) return;
@@ -688,17 +706,22 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
         _prefetchTrack = nil;
     }
     NSURL *recent = !offline && !prefetched && _audioAttempts == 1 ? [self takeRecentAudioForTrack:selectedTrack] : nil;
-    if (offline) resolved(offline, nil);
-    else if (prefetched) resolved(prefetched, nil);
-    else if (recent) resolved(recent, nil);
-    else {
-        _audioRequest = [[_api streamURLForTrack:selectedTrack excludingSources:_failedAudioSources
-                                      completion:resolved] retain];
-        _audioRequest.allowsPreview = YES;
-        _audioRequest.onUpgrade = ^(NSURL *url, NSError *error) {
-            [self upgradeAudio:url error:error generation:generation attempt:attempt];
-        };
+    if (offline || prefetched || recent) {
+        RewindConfigureAudioSessionNow();
+        RewindPlayerNotify(self, nil);
+        resolved(offline ?: (prefetched ?: recent), nil);
+        return;
     }
+    /* the request goes out before anything that talks to the system: a screen update or the session that stalls the main thread must not be what the player request waits for */
+    RewindDebugLog(@"resolve %@ asks the player", selectedTrack.videoID);
+    _audioRequest = [[_api streamURLForTrack:selectedTrack excludingSources:_failedAudioSources
+                                  completion:resolved] retain];
+    _audioRequest.allowsPreview = YES;
+    _audioRequest.onUpgrade = ^(NSURL *url, NSError *error) {
+        [self upgradeAudio:url error:error generation:generation attempt:attempt];
+    };
+    RewindConfigureAudioSessionAsync();
+    RewindPlayerNotify(self, nil);
 }
 
 - (void)audioFailed:(NSError *)error {
@@ -710,6 +733,7 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
                    ![_failedAudioSources containsObject:_audioSourceKey];
     if (tryNext) [_failedAudioSources addObject:_audioSourceKey];
     ++_audioAttempt;
+    if (_audioRequest) RewindDebugLog(@"audio request of %@ cancelled: source failed", _track.videoID);
     [_audioRequest cancel];
     [_audioRequest release];
     _audioRequest = nil;
@@ -1214,6 +1238,7 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
     _buffering = NO;
     _audioFailed = NO;
     _wantsPlayback = NO;
+    if (_audioRequest) RewindDebugLog(@"audio request of %@ cancelled: playback stopped", _track.videoID);
     [_audioRequest cancel];
     [_audioRequest release];
     _audioRequest = nil;

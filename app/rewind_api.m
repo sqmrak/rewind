@@ -52,6 +52,12 @@ static NSString * const RewindAndroidMusicClientVersion = @"7.27.52";
 - (BOOL)allowsPreview {
     return _parent ? _parent.allowsPreview : _allowsPreview;
 }
+- (BOOL)playback {
+    return _parent ? _parent.playback : _playback;
+}
+- (void)setPlayback:(BOOL)playback {
+    _playback = playback;
+}
 - (void)setAllowsPreview:(BOOL)allowed {
     _allowsPreview = allowed;
 }
@@ -977,6 +983,21 @@ static NSOperationQueue *RewindNetworkQueue(void) {
     return queue;
 }
 
+/* the requests of the track being played, apart from downloads and prefetches that may fill the other queue for minutes */
+static NSOperationQueue *RewindPlaybackQueue(void) {
+    static NSOperationQueue *queue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        queue = [[NSOperationQueue alloc] init];
+        [queue setMaxConcurrentOperationCount:12];
+    });
+    return queue;
+}
+
+static NSOperationQueue *RewindQueueForAudio(RewindAudioRequest *audioRequest) {
+    return audioRequest.playback ? RewindPlaybackQueue() : RewindNetworkQueue();
+}
+
 static NSOperationQueue *RewindMetadataQueue(void) {
     static NSOperationQueue *queue;
     static dispatch_once_t once;
@@ -991,7 +1012,7 @@ static void RewindSendRequestBeforeDate(NSURLRequest *request, NSURLRequest *fal
                                       RewindAudioRequest *audioRequest, NSDate *deadline,
                                       RewindNetworkCompletion completion) {
     RewindNetworkCompletion done = [[completion copy] autorelease];
-    NSOperationQueue *queue = audioRequest ? RewindNetworkQueue() : RewindMetadataQueue();
+    NSOperationQueue *queue = audioRequest ? RewindQueueForAudio(audioRequest) : RewindMetadataQueue();
     [queue addOperationWithBlock:^{
         NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
         NSHTTPURLResponse *response = nil;
@@ -1036,7 +1057,12 @@ static void RewindSendRequestWithCancellation(NSURLRequest *request, NSURLReques
     NSTimeInterval timeout = request ? request.timeoutInterval : 8.0;
     __block BOOL settled = NO;
     RewindNetworkCompletion done = [[^(id root, NSError *error) {
-        if (settled || audioRequest.cancelled) return;
+        if (settled) return;
+        if (audioRequest.cancelled) {
+            /* a cancelled request ends without an answer, so the log is the only place that says it did not hang */
+            RewindDebugLog(@"request %@ dropped: its audio request was cancelled", request.URL.path);
+            return;
+        }
         settled = YES;
         completion(root, error);
     } copy] autorelease];
@@ -1931,8 +1957,9 @@ static NSArray *RewindAudioCandidates(id root, NSString *clientName, NSSet *excl
 }
 
 static BOOL RewindNeedsPlainM4A(void) {
-    /* ios 5 and 6 cannot play the youtube fragmented aac file through avplayer */
-    return [[[UIDevice currentDevice] systemVersion] integerValue] < 7;
+    /* ios 5 and 6 cannot play the youtube fragmented aac file through avplayer, and an iphone 5s on 10.3.3 never started it either, while the plain m4a of the proxy plays on
+       every ios; the systems from 11 on take the fragmented file as it is */
+    return [[[UIDevice currentDevice] systemVersion] integerValue] < 11;
 }
 
 static void RewindDurationWithPlayerClient(NSString *videoID,
@@ -2242,7 +2269,7 @@ static void RewindSABRWorker(RewindSABRSession *session);
 /* the planner and the feed are not thread safe, every touch holds the session lock */
 static void RewindSABRSpawnWorkers(RewindSABRSession *session, NSUInteger count) {
     for (NSUInteger i = 0; i < count; ++i)
-        [RewindNetworkQueue() addOperationWithBlock:^{
+        [RewindQueueForAudio(session->request) addOperationWithBlock:^{
             NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
             RewindSABRWorker(session);
             [pool drain];
@@ -2422,7 +2449,7 @@ static void RewindTryAudioCandidate(NSArray *candidates, NSUInteger index, NSStr
         RewindRegisterAudioSource(source, userAgent, key);
         RewindDebugLog(@"audio %@ started before validation", key);
         completion(source, nil);
-        [RewindNetworkQueue() addOperationWithBlock:^{
+        [RewindQueueForAudio(audioRequest) addOperationWithBlock:^{
             NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
             NSError *probeError = nil;
             BOOL valid = RewindProbeAudioFile(source, format, userAgent, &probeError, audioRequest);
@@ -2444,7 +2471,7 @@ static void RewindTryAudioCandidate(NSArray *candidates, NSUInteger index, NSStr
         }];
         return;
     }
-    [RewindNetworkQueue() addOperationWithBlock:^{
+    [RewindQueueForAudio(audioRequest) addOperationWithBlock:^{
         NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
         NSError *error = nil;
         NSURL *url = nil;
@@ -2758,6 +2785,7 @@ static void RewindResolveAudio(NSString *videoID, NSString *apiKey, BOOL stream,
     }
     NSSet *excluded = [[sources copy] autorelease];
     RewindAudioRequest *request = [[[RewindAudioRequest alloc] init] autorelease];
+    request.playback = YES;
     NSDictionary *cached = RewindCachedAudioURL(track.videoID, excluded);
     if (cached) {
         NSURL *url = [cached objectForKey:@"url"];

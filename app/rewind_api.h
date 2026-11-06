@@ -143,6 +143,7 @@ typedef void (^RewindAudioCompletion)(NSURL *url, NSError *error);
     BOOL _cancelled;
     BOOL _allowsPreview;
     BOOL _upgradeExpected;
+    BOOL _playback;
     void (^_onUpgrade)(NSURL *url, NSError *error);
     RewindAudioRequest *_parent;
 }
@@ -152,6 +153,9 @@ typedef void (^RewindAudioCompletion)(NSURL *url, NSError *error);
    refused probe, or nil and an error comes later through onUpgrade */
 @property(nonatomic, assign) BOOL allowsPreview;
 @property(nonatomic, assign) BOOL upgradeExpected;
+/* the track being played, as against a download or a prefetch: its requests run on a queue of their own, so a long playlist download cannot hold every slot while a
+   tapped track waits for its player request */
+@property(nonatomic, assign) BOOL playback;
 @property(nonatomic, copy) void (^onUpgrade)(NSURL *url, NSError *error);
 - (void)cancel;
 /* a request that is cancelled with this one but can also be cancelled alone, for the clients raced
