@@ -26,6 +26,8 @@ a youtube music client for jailbroken ios 5 to 16, one deb. formerly tunetube.
 - the bundled login reads the selected profile, liked music and playlists
 - creating youtube playlists needs your own oauth setup in settings
 - signed-out playlists stay local
+- public playlists and albums open without signing in; the download button saves their loaded tracks for offline use
+- device sign-in uses alternate google oauth hosts after dns or tls connection failures
 
 ## install
 
@@ -58,6 +60,11 @@ needs `THEOS REWIND_SDK_V7 REWIND_SDK_V64`, outputs `rewind_<version>.deb`.
 `REWIND_TC`, `REWIND_LIPO` and `REWIND_LDID` override the toolchain tools.
 `make fat` builds the app, `make ipa` builds an ipa.
 `art/render_app_icon.py` redraws the home screen icons (numpy, scipy, pillow).
+
+text with emoji, symbols or scripts the system lacks is set with CoreText (`app/rewind_text.m`): characters that no system font has come from the fallback fonts in `app/fonts`, and
+every emoji is drawn from `emoji.pack` when the bundle has one. the pack holds apple's artwork and is not licensed for redistribution, so it is not in the repository: a build
+for your own device names it with `REWIND_EMOJI_PACK=/path/to/emoji.pack`, and that deb must not be published. without it the text uses the system's emoji.
+the pack is indexed by `core/rewind_emoji_data.c`, so both come from the same run of the generator that wrote them.
 
 offline download checks: [tests/download_probe.md](tests/download_probe.md).
 

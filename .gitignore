@@ -19,6 +19,9 @@ tests/test_sabr
 tests/test_fmp4
 tests/test_playback
 tests/test_layout
+tests/test_motion
+tests/test_emoji
+tests/test_text_class
 
 # python caches
 __pycache__/
@@ -39,3 +42,4 @@ __pycache__/
 *.pfx
 account.plist
 *.log
+*.pack

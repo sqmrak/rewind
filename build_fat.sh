@@ -39,6 +39,17 @@ cp "${ROOT}/app/icons/"player-*.png "${ROOT}/build/Rewind.app/"
 cp "${ROOT}/app/icons/"menu-*.png "${ROOT}/build/Rewind.app/"
 cp "${ROOT}/app/icons/"ic-*.png "${ROOT}/build/Rewind.app/"
 cp "${ROOT}/app/fonts/"Roboto-*.ttf "${ROOT}/build/Rewind.app/"
+# characters that Roboto and the system have no glyph for
+cp "${ROOT}/app/fonts/"NotoSans*.ttf "${ROOT}/app/fonts/"Unifont*.otf "${ROOT}/build/Rewind.app/"
+cp "${ROOT}/app/fonts/LICENSE-Fallback.txt" "${ROOT}/build/Rewind.app/"
+cp "${ROOT}/third_party/libwebp/COPYING" "${ROOT}/build/Rewind.app/LICENSE-libwebp.txt"
+# the emoji pictures are Apple's artwork and are not licensed for redistribution, so the pack is not part of the repository: a build for your own device names it, and a build
+# without it draws the system's emoji
+if [[ -n "${REWIND_EMOJI_PACK:-}" ]]; then
+    [[ -f "${REWIND_EMOJI_PACK}" ]] || { echo "REWIND_EMOJI_PACK is not a file: ${REWIND_EMOJI_PACK}" >&2; exit 1; }
+    cp "${REWIND_EMOJI_PACK}" "${ROOT}/build/Rewind.app/emoji.pack"
+    echo "this build carries the emoji pack: do not publish it"
+fi
 cp "${ROOT}/app/fonts/LICENSE-Roboto.txt" "${ROOT}/art/LICENSE-MaterialSymbols.txt" "${ROOT}/build/Rewind.app/"
 cp "${ROOT}/app/icons/"Default*.png "${ROOT}/build/Rewind.app/"
 # ios 14 and later confine unsandboxed /Applications bundles without this entitlement
