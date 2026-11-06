@@ -1621,49 +1621,70 @@ NSString * const RewindResultTypeArtist = @"Artist";
     });
 }
 
+static NSDictionary *RewindPublicPlaylistShelf(id root) {
+    NSDictionary *shelf = RewindDict(RewindFindValueForKey(root, @"musicPlaylistShelfRenderer", 0));
+    if (!shelf) shelf = RewindDict(RewindFindValueForKey(root, @"musicPlaylistShelfContinuation", 0));
+    if (!shelf) shelf = RewindDict(RewindFindValueForKey(root, @"musicShelfRenderer", 0));
+    if (!shelf) shelf = RewindDict(RewindFindValueForKey(root, @"appendContinuationItemsAction", 0));
+    return shelf;
+}
+
+static NSString *RewindPublicPlaylistContinuation(NSDictionary *shelf, BOOL *invalid) {
+    if (invalid) *invalid = NO;
+    NSString *next = RewindString(RewindFindValueForKey([shelf objectForKey:@"continuations"], @"continuation", 0));
+    id contents = [shelf objectForKey:@"contents"] ?: [shelf objectForKey:@"continuationItems"];
+    id item = RewindFindValueForKey(contents, @"continuationItemRenderer", 0);
+    if (!next) next = RewindString(RewindFindValueForKey(item, @"token", 0));
+    if ((item || RewindArray([shelf objectForKey:@"continuations"]).count) && !next.length && invalid)
+        *invalid = YES;
+    return next;
+}
+
+static void RewindPublicPlaylistPage(NSString *apiKey, NSDictionary *body, NSMutableArray *tracks,
+                                     NSMutableSet *seen, NSUInteger page, RewindSearchCompletion completion) {
+    NSError *error = nil;
+    NSURLRequest *request = RewindRequest(@"browse", apiKey, body, &error);
+    NSURLRequest *fallback = RewindRequestForEndpoint(
+        RewindEndpointFallback, @"https://youtubei.googleapis.com", @"67", RewindClientVersion,
+        @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
+        @"browse", apiKey, body, NULL);
+    if (!request) { completion(nil, error); return; }
+    RewindSendRequest(request, fallback, ^(id root, NSError *networkError) {
+        if (networkError) { completion(nil, networkError); return; }
+        NSDictionary *shelf = RewindPublicPlaylistShelf(root);
+        if (!shelf) { completion(nil, RewindError(14, @"playlist response has no track list")); return; }
+        id contents = [shelf objectForKey:@"contents"] ?: [shelf objectForKey:@"continuationItems"];
+        if (![contents isKindOfClass:[NSArray class]]) {
+            completion(nil, RewindError(14, @"playlist response has invalid tracks"));
+            return;
+        }
+        RewindCollectTracks(contents, tracks);
+        BOOL invalid = NO;
+        NSString *next = RewindPublicPlaylistContinuation(shelf, &invalid);
+        if (invalid) { completion(nil, RewindError(14, @"playlist continuation is invalid")); return; }
+        if (!next.length) {
+            completion(tracks.count ? tracks : nil, tracks.count ? nil : RewindError(14, @"playlist has no playable tracks"));
+            return;
+        }
+        if (page >= 40 || next.length > 8192 || [seen containsObject:next]) {
+            completion(nil, RewindError(14, @"playlist continuation limit reached"));
+            return;
+        }
+        [seen addObject:next];
+        NSDictionary *nextBody = [NSDictionary dictionaryWithObjectsAndKeys:
+                                  RewindClientContext(), @"context", next, @"continuation", nil];
+        RewindPublicPlaylistPage(apiKey, nextBody, tracks, seen, page + 1, completion);
+    });
+}
+
 - (void)playlistTracksForID:(NSString *)playlistID completion:(RewindSearchCompletion)completion {
     if (!completion) return;
-    if (!playlistID.length) {
-        completion(nil, RewindError(13, @"playlist has no id"));
-        return;
-    }
-    /* browse answers 400 for a bare playlist id; the page id carries a VL prefix */
+    if (!playlistID.length) { completion(nil, RewindError(13, @"playlist has no id")); return; }
     NSString *browseID = [playlistID hasPrefix:@"VL"] || [playlistID hasPrefix:@"MPRE"]
         ? playlistID : [@"VL" stringByAppendingString:playlistID];
     NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
-                          RewindClientContext(), @"context",
-                          browseID, @"browseId", nil];
-    NSError *error = nil;
-    NSURLRequest *request = RewindRequest(@"browse", _apiKey, body, &error);
-    NSError *fallbackError = nil;
-    NSURLRequest *fallback = RewindRequestForEndpoint(
-        RewindEndpointFallback, @"https://youtubei.googleapis.com", @"67",
-        RewindClientVersion,
-        @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
-        @"browse", _apiKey, body, &fallbackError);
-    if (!request) {
-        completion(nil, error);
-        return;
-    }
-    RewindSendRequest(request, fallback, ^(id decoded, NSError *networkError) {
-        if (networkError) {
-            completion(nil, networkError);
-            return;
-        }
-        RewindDecodeResponse(decoded, ^(id root, NSError *jsonError) {
-            if (jsonError) {
-                completion(nil, jsonError);
-                return;
-            }
-            NSMutableArray *tracks = [NSMutableArray array];
-            RewindCollectTracks(root, tracks);
-            if (!tracks.count) {
-                completion(nil, RewindError(14, @"playlist has no playable tracks"));
-                return;
-            }
-            completion(tracks, nil);
-        });
-    });
+                          RewindClientContext(), @"context", browseID, @"browseId", nil];
+    RewindPublicPlaylistPage(_apiKey, body, [NSMutableArray array], [NSMutableSet set], 1, completion);
 }
 
 - (void)artistPageForID:(NSString *)artistID completion:(RewindArtistPageCompletion)completion {

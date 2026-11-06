@@ -38,6 +38,25 @@ int main(int argc, char **argv) {
     assert(plain && !plain.timed && plain.lines.count == 2);
     assert(!RewindTimedLyrics([NSDictionary dictionary]));
     assert(!RewindPlainLyrics([NSDictionary dictionary]));
+    NSDictionary *command = [NSDictionary dictionaryWithObject:@"next-page" forKey:@"token"];
+    NSDictionary *item = [NSDictionary dictionaryWithObject:
+        [NSDictionary dictionaryWithObject:command forKey:@"continuationCommand"]
+        forKey:@"continuationEndpoint"];
+    NSArray *pageItems = [NSArray arrayWithObject:
+        [NSDictionary dictionaryWithObject:item forKey:@"continuationItemRenderer"]];
+    NSDictionary *firstShelf = [NSDictionary dictionaryWithObject:pageItems forKey:@"contents"];
+    NSDictionary *firstPage = [NSDictionary dictionaryWithObject:firstShelf forKey:@"musicPlaylistShelfRenderer"];
+    BOOL invalid = YES;
+    assert([RewindPublicPlaylistContinuation(RewindPublicPlaylistShelf(firstPage), &invalid) isEqualToString:@"next-page"]);
+    assert(!invalid);
+    NSDictionary *moreShelf = [NSDictionary dictionaryWithObject:pageItems forKey:@"continuationItems"];
+    NSDictionary *morePage = [NSDictionary dictionaryWithObject:moreShelf forKey:@"appendContinuationItemsAction"];
+    assert([RewindPublicPlaylistContinuation(RewindPublicPlaylistShelf(morePage), &invalid) isEqualToString:@"next-page"]);
+    NSDictionary *badShelf = [NSDictionary dictionaryWithObject:[NSArray arrayWithObject:
+        [NSDictionary dictionaryWithObject:[NSDictionary dictionary] forKey:@"continuationItemRenderer"]]
+        forKey:@"contents"];
+    assert(!RewindPublicPlaylistContinuation(badShelf, &invalid) && invalid);
+    assert(!RewindPublicPlaylistContinuation([NSDictionary dictionary], &invalid) && !invalid);
     NSMutableArray *entries = [NSMutableArray array];
     for (NSUInteger i = 0; i < 501; ++i)
         [entries addObject:[NSDictionary dictionaryWithObject:@"line" forKey:@"lyricLine"]];

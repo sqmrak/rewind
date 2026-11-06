@@ -63,6 +63,9 @@ void RewindAddTrackToPickedPlaylist(RewindTrack *track, NSString *title,
     UIView *_backBacking;
     RewindIconButton *_backButton;
     RewindIconButton *_playButton;
+    RewindIconButton *_downloadButton;
+    BOOL _tracksComplete;
+    BOOL _downloadingPlaylist;
     UILabel *_nameLabel;
     UILabel *_subLabel;
 

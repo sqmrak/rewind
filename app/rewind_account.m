@@ -17,6 +17,8 @@ static NSString * const RewindOAuthClientSecret = @"SboVhoG9s0rNafixCSGGKXAT";
 static NSString * const RewindOAuthScope = @"https://www.googleapis.com/auth/youtube";
 static NSString * const RewindOAuthCodeURL = @"https://oauth2.googleapis.com/device/code";
 static NSString * const RewindOAuthTokenURL = @"https://oauth2.googleapis.com/token";
+static NSString * const RewindOAuthCodeFallbackURL = @"https://accounts.google.com/o/oauth2/device/code";
+static NSString * const RewindOAuthTokenFallbackURL = @"https://www.googleapis.com/oauth2/v4/token";
 static NSString * const RewindOAuthRevokeURL = @"https://oauth2.googleapis.com/revoke";
 static NSString * const RewindTVEndpoint = @"https://www.youtube.com/youtubei/v1";
 /* same google authority; older dns setups resolve it when youtube.com fails */
@@ -374,6 +376,7 @@ static NSError *RewindAccountResponseError(NSInteger status, id json) {
 }
 
 static BOOL RewindAccountShouldUseFallback(NSError *error) {
+    if (![error.domain isEqualToString:NSURLErrorDomain]) return NO;
     switch (error.code) {
         case NSURLErrorCannotFindHost:
         case NSURLErrorDNSLookupFailed:
@@ -386,6 +389,17 @@ static BOOL RewindAccountShouldUseFallback(NSError *error) {
         default:
             return NO;
     }
+}
+
+static void RewindAccountSendOAuth(NSString *url, NSString *fallbackURL, NSDictionary *fields,
+                                   RewindHTTPCompletion completion) {
+    RewindAccountSend(RewindAccountFormRequest(url, fields), ^(NSInteger status, id json, NSError *error) {
+        if (error && RewindAccountShouldUseFallback(error)) {
+            RewindAccountSend(RewindAccountFormRequest(fallbackURL, fields), completion);
+            return;
+        }
+        completion(status, json, error);
+    });
 }
 
 static void RewindAccountFinishRefresh(NSString *token, NSError *error) {
@@ -414,7 +428,7 @@ static void RewindAccountWithToken(BOOL force, RewindTokenCompletion completion)
                             g_account.clientSecret ?: @"", @"client_secret",
                             @"refresh_token", @"grant_type",
                             g_account.refreshToken, @"refresh_token", nil];
-    RewindAccountSend(RewindAccountFormRequest(RewindOAuthTokenURL, fields),
+    RewindAccountSendOAuth(RewindOAuthTokenURL, RewindOAuthTokenFallbackURL, fields,
                       ^(NSInteger status, id json, NSError *error) {
         if (generation != g_account.generation) return;
         NSDictionary *root = RewindAccountDict(json);
@@ -867,8 +881,12 @@ static void RewindAccountPagePlaylist(NSString *continuation, NSMutableArray *tr
         completion(nil, RewindAccountError(401, RewindL(@"account_signed_out")));
         return;
     }
-    if (!continuation || page >= maxPages) {
+    if (!continuation) {
         completion(tracks, nil);
+        return;
+    }
+    if (page >= maxPages) {
+        completion(tracks, maxPages == 1 ? nil : RewindAccountError(502, @"Playlist exceeds the page limit"));
         return;
     }
     if (progress && tracks.count) progress([[tracks copy] autorelease], nil);
@@ -881,12 +899,21 @@ static void RewindAccountPagePlaylist(NSString *continuation, NSMutableArray *tr
         if (error) {
             /* keep the pages that did load; the list is still correct up to here */
             NSLog(@"rewind: playlist page %lu failed: %@", (unsigned long)page, error);
-            completion(tracks, tracks.count ? nil : error);
+            completion(tracks, error);
             return;
         }
         NSDictionary *list = RewindAccountDict(RewindTVFind(root, @"playlistVideoListContinuation", 0));
+        if (!list || !RewindAccountArray([list objectForKey:@"contents"])) {
+            completion(tracks, RewindAccountError(502, @"YouTube returned an invalid playlist page"));
+            return;
+        }
         [tracks addObjectsFromArray:RewindTracksFromItems([list objectForKey:@"contents"])];
-        RewindAccountPagePlaylist(RewindTVContinuation(list), tracks, page + 1, maxPages, generation, progress, completion);
+        NSString *next = RewindTVContinuation(list);
+        if (RewindAccountArray([list objectForKey:@"continuations"]).count && !next) {
+            completion(tracks, RewindAccountError(502, @"YouTube returned an invalid playlist continuation"));
+            return;
+        }
+        RewindAccountPagePlaylist(next, tracks, page + 1, maxPages, generation, progress, completion);
     });
 }
 
@@ -909,9 +936,18 @@ static void RewindAccountLoadPlaylistPages(NSString *playlistID, NSUInteger maxP
             return;
         }
         NSDictionary *list = RewindAccountDict(RewindTVFind(root, @"playlistVideoListRenderer", 0));
+        if (!list || !RewindAccountArray([list objectForKey:@"contents"])) {
+            completion(nil, RewindAccountError(502, @"YouTube returned an invalid playlist"));
+            return;
+        }
         NSMutableArray *tracks = [NSMutableArray arrayWithArray:
                                   RewindTracksFromItems([list objectForKey:@"contents"])];
-        RewindAccountPagePlaylist(RewindTVContinuation(list), tracks, 1, maxPages, generation, progress, completion);
+        NSString *next = RewindTVContinuation(list);
+        if (RewindAccountArray([list objectForKey:@"continuations"]).count && !next) {
+            completion(tracks, RewindAccountError(502, @"YouTube returned an invalid playlist continuation"));
+            return;
+        }
+        RewindAccountPagePlaylist(next, tracks, 1, maxPages, generation, progress, completion);
     });
 }
 
@@ -1339,7 +1375,7 @@ void RewindAccountRequestDeviceCode(RewindDeviceCodeCompletion completion) {
     NSDictionary *fields = [NSDictionary dictionaryWithObjectsAndKeys:
                             clientID, @"client_id",
                             RewindOAuthScope, @"scope", nil];
-    RewindAccountSend(RewindAccountFormRequest(RewindOAuthCodeURL, fields),
+    RewindAccountSendOAuth(RewindOAuthCodeURL, RewindOAuthCodeFallbackURL, fields,
                       ^(NSInteger status, id json, NSError *error) {
         NSDictionary *root = RewindAccountDict(json);
         NSString *userCode = RewindAccountString([root objectForKey:@"user_code"]);
@@ -1379,7 +1415,7 @@ void RewindAccountPollDeviceCode(RewindDeviceCode *code, RewindDevicePollComplet
                             code.clientSecret ?: @"", @"client_secret",
                             code.deviceCode, @"device_code",
                             @"urn:ietf:params:oauth:grant-type:device_code", @"grant_type", nil];
-    RewindAccountSend(RewindAccountFormRequest(RewindOAuthTokenURL, fields),
+    RewindAccountSendOAuth(RewindOAuthTokenURL, RewindOAuthTokenFallbackURL, fields,
                       ^(NSInteger status, id json, NSError *error) {
         if (code.cancelled || generation != g_account.generation) {
             completion(RewindDevicePollFailed, RewindAccountError(401, @"Sign in was cancelled"));

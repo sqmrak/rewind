@@ -79,6 +79,10 @@ int main(int argc, char **argv) {
     assert(RewindAccountWriteState(&candidate));
     assert(![[NSFileManager defaultManager] fileExistsAtPath:RewindAccountStorePath()]);
     assert([[NSFileManager defaultManager] removeItemAtPath:fixture_home error:NULL]);
+    assert(RewindAccountShouldUseFallback([NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorDNSLookupFailed userInfo:nil]));
+    assert(RewindAccountShouldUseFallback([NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorServerCertificateUntrusted userInfo:nil]));
+    assert(!RewindAccountShouldUseFallback([NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil]));
+    assert(!RewindAccountShouldUseFallback([NSError errorWithDomain:@"other" code:NSURLErrorDNSLookupFailed userInfo:nil]));
     [pool drain];
     puts("production account authorization, selected-name and secure-store fixtures passed");
     return 0;

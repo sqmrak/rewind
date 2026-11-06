@@ -43,7 +43,7 @@ def fixture_source():
     names = ['RewindAccountString', 'RewindAccountDict', 'RewindAccountArray',
              'RewindAccountSeconds', 'RewindAccountSetString', 'RewindAccountStorePath',
              'RewindAccountLoadState', 'RewindAccountWriteState', 'RewindAccountOAuthCredential',
-             'RewindAccountResponseError', 'RewindTVIsID', 'RewindTVText',
+             'RewindAccountResponseError', 'RewindAccountShouldUseFallback', 'RewindTVIsID', 'RewindTVText',
              'RewindAccountSelectedItem']
     units.extend(function(name) for name in names)
     units.append((ROOT / 'tests/test_account.m').read_text())
