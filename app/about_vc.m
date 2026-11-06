@@ -1,5 +1,6 @@
 #import "about_vc.h"
 #import "rewind_text.h"
+#include "rewind_device.h"
 
 #import <QuartzCore/QuartzCore.h>
 #include <sys/sysctl.h>
@@ -40,6 +41,9 @@ static NSString *AboutModel(void) {
         return [[UIDevice currentDevice] model];
     machine[sizeof machine - 1] = '\0';
     NSString *code = [NSString stringWithUTF8String:machine];
+    /* the identifier ("iPhone4,1") becomes the name people know ("iPhone 4S"), and one the table lacks is shown as it is */
+    const char *name = rewind_device_name(machine);
+    if (name) return [NSString stringWithUTF8String:name];
     return [code length] ? code : [[UIDevice currentDevice] model];
 }
 

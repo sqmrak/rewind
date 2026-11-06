@@ -7,7 +7,7 @@ CFLAGS ?= -std=c99 -Wall -Wextra -O2 -I../core
 
 all: test
 
-test: test_model test_qr test_fmp4 test_ump test_audio test_sabr test_playback test_layout test_motion test_emoji test_text_class
+test: test_model test_qr test_fmp4 test_ump test_audio test_sabr test_playback test_layout test_motion test_emoji test_text_class test_device
 	./test_model
 	./test_qr
 	./test_fmp4
@@ -19,11 +19,15 @@ test: test_model test_qr test_fmp4 test_ump test_audio test_sabr test_playback t
 	./test_motion
 	./test_emoji
 	./test_text_class
+	./test_device
 	python3 test_network.py
 	python3 test_account.py
 
 test_emoji: test_emoji.c test_util.h ../core/rewind_emoji.c ../core/rewind_emoji_data.c ../core/rewind_emoji.h
 	$(CC) $(CFLAGS) test_emoji.c ../core/rewind_emoji.c ../core/rewind_emoji_data.c -lm -o $@
+
+test_device: test_device.c ../core/rewind_device.c ../core/rewind_device.h
+	$(CC) $(CFLAGS) test_device.c ../core/rewind_device.c -o $@
 
 test_text_class: test_text_class.c test_util.h ../core/rewind_text_class.c ../core/rewind_text_class.h
 	$(CC) $(CFLAGS) test_text_class.c ../core/rewind_text_class.c -o $@
