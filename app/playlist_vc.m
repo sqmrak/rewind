@@ -18,6 +18,7 @@
 #import "rewind_config.h"
 #import "rewind_account.h"
 #import "rewind_audio.h"
+#import "rewind_download.h"
 
 static NSDictionary *RewindPlaylistEntry(RewindTrack *track) {
     if (!track.videoID.length) return nil;
@@ -255,7 +256,7 @@ void RewindAddTrackToPickedPlaylist(RewindTrack *track, NSString *title,
 }
 
 static UILabel *RewindPlaylistStatusLabel(void) {
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.font = [UIFont systemFontOfSize:13.0f];
     label.numberOfLines = 0;
@@ -286,11 +287,11 @@ static UILabel *RewindPlaylistStatusLabel(void) {
                            CGRectMake(RW(16.0f), RW(10.0f), RW(28.0f), RW(28.0f))];
         [self.contentView addSubview:_artwork[index]];
     }
-    _titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _titleLabel = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _titleLabel.backgroundColor = [UIColor clearColor];
     _titleLabel.font = RewindFont(16.0f, RewindWeightMedium);
     [self.contentView addSubview:_titleLabel];
-    _detailLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _detailLabel = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _detailLabel.backgroundColor = [UIColor clearColor];
     _detailLabel.font = RewindFont(14.0f, RewindWeightRegular);
     [self.contentView addSubview:_detailLabel];
@@ -551,7 +552,7 @@ static UILabel *RewindPlaylistStatusLabel(void) {
     if ([self tableView:tableView heightForHeaderInSection:section] <= 0.0f) return nil;
     UIView *header = [[[UIView alloc] initWithFrame:CGRectMake(0.0f, 0.0f, tableView.bounds.size.width, 30.0f)] autorelease];
     header.backgroundColor = [UIColor clearColor];
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectMake(16.0f, 8.0f,
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectMake(16.0f, 8.0f,
                                                                 tableView.bounds.size.width - 32.0f, 18.0f)] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.font = [UIFont boldSystemFontOfSize:11.0f];
@@ -672,7 +673,7 @@ static UILabel *RewindPlaylistStatusLabel(void) {
 @end
 
 static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *color) {
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.font = RewindFont(size, weight);
     label.textColor = color;
@@ -721,6 +722,7 @@ static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *
     [_backBacking release];
     [_backButton release];
     [_playButton release];
+    [_downloadButton release];
     [_nameLabel release];
     [_subLabel release];
     [_content release];
@@ -775,6 +777,12 @@ static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *
     [_playButton setIconColor:RewindColorOnAccent()];
     [_playButton addTarget:self action:@selector(playPressed) forControlEvents:UIControlEventTouchUpInside];
     [_headerView addSubview:_playButton];
+
+    _downloadButton = [[RewindIconButton buttonWithIcon:@"download" points:RW(22.0f)] retain];
+    [_downloadButton setIconColor:[UIColor whiteColor]];
+    [_downloadButton addTarget:self action:@selector(downloadPlaylistPressed) forControlEvents:UIControlEventTouchUpInside];
+    _downloadButton.accessibilityLabel = RewindL(@"playlist_download_all");
+    [_headerView addSubview:_downloadButton];
 
     /* fixed over the scroll content, never affected by the header stretch or scroll */
     _backBacking = [[UIView alloc] initWithFrame:CGRectZero];
@@ -843,6 +851,7 @@ static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *
     CGFloat rowY = _headerHeight - side - playSize;
     _playButton.frame = CGRectMake(side, rowY, playSize, playSize);
     _playButton.layer.cornerRadius = playSize * 0.5f;
+    _downloadButton.frame = CGRectMake(side + playSize + RW(12.0f), rowY, playSize, playSize);
 
     CGFloat textWidth = MAX(RW(80.0f), width - side * 2.0f);
     CGFloat subH = RW(18.0f);
@@ -871,9 +880,14 @@ static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *
     [CATransaction commit];
 }
 
-/* albums are public pages; the tv client only renders the signed in user's lists */
+/* the tv client only renders playlists belonging to the signed in user */
 - (BOOL)loadsFromPublicAPI {
-    return [_remotePlaylist.resultType isEqualToString:RewindResultTypeAlbum] || !RewindAccountIsSignedIn();
+    if ([_remotePlaylist.resultType isEqualToString:RewindResultTypeAlbum] ||
+        !RewindAccountIsSignedIn()) return YES;
+    if ([_remotePlaylist.playlistID isEqualToString:@"LM"]) return NO;
+    for (RewindTrack *playlist in RewindAccountCachedPlaylists())
+        if ([playlist.playlistID isEqualToString:_remotePlaylist.playlistID]) return NO;
+    return YES;
 }
 
 - (BOOL)canEditTracks {
@@ -895,6 +909,7 @@ static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *
 
 - (void)reloadData {
     if (!_remotePlaylist) {
+        _tracksComplete = YES;
         [_tracks removeAllObjects];
         [_tracks addObjectsFromArray:RewindTracksForPlaylist(_playlistName)];
         _status.text = RewindL(@"no_tracks");
@@ -905,13 +920,19 @@ static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *
         return;
     }
     NSUInteger request = ++_request;
+    _tracksComplete = NO;
     if (!_tracks.count) {
         _status.text = RewindL(@"loading_tracks");
         _status.hidden = NO;
     }
     [self retain];
     void (^finish)(NSArray *, NSError *) = ^(NSArray *tracks, NSError *error) {
-        if (request == _request) [self showRemoteTracks:tracks error:error];
+        if (request == _request) {
+            _tracksComplete = !error;
+            [self showRemoteTracks:tracks error:error];
+            if (error && tracks.count)
+                RewindShowToast(self.view, RewindFriendlyError(error), RW(28.0f));
+        }
         [self release];
     };
     if ([self loadsFromPublicAPI]) {
@@ -979,6 +1000,33 @@ static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *
 
 - (void)playPressed {
     [self playTrackAtIndex:0];
+}
+
+- (void)downloadPlaylistTracks:(NSArray *)tracks index:(NSUInteger)index failures:(NSUInteger)failures lastError:(NSError *)lastError {
+    if (index >= tracks.count) {
+        _downloadingPlaylist = NO;
+        NSString *message = failures
+            ? [NSString stringWithFormat:RewindL(@"playlist_download_errors"), (unsigned long)failures,
+               RewindFriendlyError(lastError) ?: RewindL(@"menu_download_failed")]
+            : RewindL(@"menu_download_done");
+        RewindShowToast(self.view, message, RW(28.0f));
+        return;
+    }
+    RewindDownloadTrack([tracks objectAtIndex:index], _api, ^(NSError *error) {
+        [self downloadPlaylistTracks:tracks index:index + 1 failures:failures + (error ? 1 : 0)
+                          lastError:error ?: lastError];
+    });
+}
+
+- (void)downloadPlaylistPressed {
+    if (_downloadingPlaylist) return;
+    if (!_tracksComplete || !_tracks.count) {
+        RewindShowToast(self.view, RewindL(@"playlist_download_unavailable"), RW(28.0f));
+        return;
+    }
+    _downloadingPlaylist = YES;
+    RewindShowToast(self.view, RewindL(@"menu_download_started"), RW(28.0f));
+    [self downloadPlaylistTracks:[NSArray arrayWithArray:_tracks] index:0 failures:0 lastError:nil];
 }
 
 - (void)confirmRemoveTrackAtIndex:(NSUInteger)index {

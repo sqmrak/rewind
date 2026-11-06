@@ -250,7 +250,7 @@
     UIView *header = [[[UIView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width, 34.0f)] autorelease];
     header.backgroundColor = [UIColor clearColor];
 
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.textColor = RewindColorHeading();
     label.font = RewindFont(11.0f, RewindWeightMedium);
@@ -391,7 +391,7 @@
     if (RewindCurrentTheme() == RewindThemeSkeuomorphic)
         return RewindChromeGroupedFooter(section == 4 ? RewindL(@"footer_tagline") : nil, tableView.bounds.size.width);
     if (section != 4) return nil;
-    UILabel *footer = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *footer = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     footer.backgroundColor = [UIColor clearColor];
     footer.textColor = RewindColorTextTertiary();
     footer.font = [UIFont systemFontOfSize:11.0f];

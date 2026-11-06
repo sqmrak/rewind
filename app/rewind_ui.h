@@ -3,6 +3,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "rewind_text.h"
+
 @class RewindTrack;
 
 typedef void (^RewindAction)(void);

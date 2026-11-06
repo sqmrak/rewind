@@ -64,12 +64,12 @@
     _avatar.clipsToBounds = YES;
     _avatar.layer.cornerRadius = RW(24.0f);
     [_profile addSubview:_avatar];
-    _name = [[UILabel alloc] initWithFrame:CGRectZero];
+    _name = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _name.backgroundColor = [UIColor clearColor];
     _name.textColor = RewindColorText();
     _name.font = RewindFont(16.0f, RewindWeightMedium);
     [_profile addSubview:_name];
-    _email = [[UILabel alloc] initWithFrame:CGRectZero];
+    _email = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _email.backgroundColor = [UIColor clearColor];
     _email.textColor = RewindColorTextSecondary();
     _email.font = RewindFont(14.0f, RewindWeightRegular);

@@ -1,4 +1,5 @@
 #import "about_vc.h"
+#import "rewind_text.h"
 
 #import <QuartzCore/QuartzCore.h>
 #include <sys/sysctl.h>
@@ -125,12 +126,12 @@ static UIImage *AboutTintedIcon(NSString *name, UIColor *color) {
         icon = [[UIImageView alloc] initWithFrame:CGRectZero];
         icon.contentMode = UIViewContentModeScaleAspectFit;
         [self.contentView addSubview:icon];
-        titleLbl = [[UILabel alloc] initWithFrame:CGRectZero];
+        titleLbl = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
         titleLbl.backgroundColor = [UIColor clearColor];
         titleLbl.font = [UIFont boldSystemFontOfSize:15.0f];
         titleLbl.lineBreakMode = NSLineBreakByTruncatingTail;
         [self.contentView addSubview:titleLbl];
-        valueLbl = [[UILabel alloc] initWithFrame:CGRectZero];
+        valueLbl = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
         valueLbl.backgroundColor = [UIColor clearColor];
         valueLbl.font = [UIFont systemFontOfSize:14.0f];
         valueLbl.numberOfLines = 0;
@@ -192,7 +193,7 @@ enum { kAboutHeroHeight = 262 };
 @end
 
 static UILabel *AboutHeroLabel(UIView *host, UIFont *font) {
-    UILabel *l = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *l = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     l.backgroundColor = [UIColor clearColor];
     l.font = font;
     l.textAlignment = NSTextAlignmentCenter;
@@ -340,16 +341,35 @@ static UILabel *AboutHeroLabel(UIView *host, UIFont *font) {
     [self applyTheme:nil];
 }
 
+/* a color a share of the way from base to tint, in rgb */
+static UIColor *RewindAboutMix(UIColor *base, UIColor *tint, CGFloat share) {
+    CGFloat b[4] = {0, 0, 0, 1}, t[4] = {0, 0, 0, 1};
+    if (![base getRed:&b[0] green:&b[1] blue:&b[2] alpha:&b[3]]) {
+        CGFloat white = 0;
+        if (![base getWhite:&white alpha:&b[3]]) return base;
+        b[0] = b[1] = b[2] = white;
+    }
+    if (![tint getRed:&t[0] green:&t[1] blue:&t[2] alpha:&t[3]]) {
+        CGFloat white = 0;
+        if (![tint getWhite:&white alpha:&t[3]]) return base;
+        t[0] = t[1] = t[2] = white;
+    }
+    return [UIColor colorWithRed:b[0] + (t[0] - b[0]) * share green:b[1] + (t[1] - b[1]) * share blue:b[2] + (t[2] - b[2]) * share alpha:1.0f];
+}
+
 - (void)applyTheme:(NSNotification *)note {
     (void)note;
     BOOL classic = RewindCurrentTheme() == RewindThemeSkeuomorphic;
     self.view.backgroundColor = classic ? RewindChromeGroupedBackground() : RewindColorCanvas();
     _backgroundGradient.hidden = classic;
     RewindStyleNavigationBar(self.navigationController.navigationBar);
-    _backgroundGradient.colors = [NSArray arrayWithObjects:
-                                  (id)RewindColorBackground().CGColor,
-                                  (id)RewindColorBackground().CGColor,
-                                  (id)RewindColorBackground().CGColor, nil];
+    /* the page glows with the accent at the top and settles into the plain background by the middle, so it is not a flat black sheet */
+    UIColor *ground = RewindColorBackground();
+    UIColor *glow = RewindAboutMix(ground, RewindColorAccentFill(), 0.42f);
+    UIColor *haze = RewindAboutMix(ground, RewindColorAccentFill(), 0.14f);
+    _backgroundGradient.colors = [NSArray arrayWithObjects:(id)glow.CGColor, (id)haze.CGColor, (id)ground.CGColor, (id)ground.CGColor, nil];
+    _backgroundGradient.locations = [NSArray arrayWithObjects:[NSNumber numberWithFloat:0.0f], [NSNumber numberWithFloat:0.3f],
+                                     [NSNumber numberWithFloat:0.65f], [NSNumber numberWithFloat:1.0f], nil];
     [_hero applyTheme];
     [self reloadContent:nil];
 }
@@ -476,7 +496,7 @@ static UILabel *AboutHeroLabel(UIView *host, UIFont *font) {
     UIView *wrap = [[[UIView alloc] initWithFrame:CGRectMake(0, 0, w, 36.0f)] autorelease];
     wrap.backgroundColor = [UIColor clearColor];
     CGFloat x = AboutRowInset(tv) + 16.0f;
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectMake(x, 12.0f, w - x * 2.0f, 20.0f)] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectMake(x, 12.0f, w - x * 2.0f, 20.0f)] autorelease];
     label.backgroundColor = [UIColor clearColor];
     if (RewindCurrentTheme() == RewindThemeSkeuomorphic) {
         label.font = RewindChromeFont(17.0f, YES);

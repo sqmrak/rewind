@@ -183,13 +183,13 @@ static NSString *RewindLibraryThumbnailURL(RewindTrack *track) {
     _artwork.image = [UIImage imageNamed:@"Icon.png"];
     [self.contentView addSubview:_artwork];
 
-    _titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _titleLabel = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _titleLabel.backgroundColor = [UIColor clearColor];
     _titleLabel.font = RewindFont(16.0f, RewindWeightMedium);
     _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.contentView addSubview:_titleLabel];
 
-    _artistLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _artistLabel = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _artistLabel.backgroundColor = [UIColor clearColor];
     _artistLabel.font = RewindFont(14.0f, RewindWeightRegular);
     _artistLabel.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -381,7 +381,7 @@ static NSString *RewindLibraryThumbnailURL(RewindTrack *track) {
     [self.view addSubview:_table];
 
     _listHeader = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, RW(72.0f))];
-    _countLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _countLabel = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _countLabel.backgroundColor = [UIColor clearColor];
     _countLabel.font = RewindFont(14.0f, RewindWeightMedium);
     [_listHeader addSubview:_countLabel];
@@ -392,7 +392,7 @@ static NSString *RewindLibraryThumbnailURL(RewindTrack *track) {
     [_listHeader addSubview:_playAllButton];
     _table.tableHeaderView = _listHeader;
 
-    _emptyLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    _emptyLabel = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _emptyLabel.backgroundColor = [UIColor clearColor];
     _emptyLabel.textColor = RewindColorText();
     _emptyLabel.font = [UIFont boldSystemFontOfSize:18.0f];
@@ -405,7 +405,7 @@ static NSString *RewindLibraryThumbnailURL(RewindTrack *track) {
     _emptyIcon.contentMode = UIViewContentModeCenter;
     [self.view addSubview:_emptyIcon];
 
-    _emptyDescription = [[UILabel alloc] initWithFrame:CGRectZero];
+    _emptyDescription = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _emptyDescription.backgroundColor = [UIColor clearColor];
     _emptyDescription.textColor = RewindColorTextSecondary();
     _emptyDescription.font = [UIFont systemFontOfSize:13.0f];

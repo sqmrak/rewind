@@ -10,6 +10,7 @@
 #include <sys/ucontext.h>
 
 #import "main_vc.h"
+#import "rewind_text.h"
 #import "settings_vc.h"
 #import "native_shell.h"
 #import "rewind_chrome.h"
@@ -189,7 +190,7 @@ void RewindReloadInterface(NSString *messageKey, void (^change)(void)) {
     spinner.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin |
         UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
     [spinner startAnimating];
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectMake(0, shade.bounds.size.height * 0.5f + 12.0f,
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectMake(0, shade.bounds.size.height * 0.5f + 12.0f,
                                                                  shade.bounds.size.width, 24.0f)] autorelease];
     label.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin |
         UIViewAutoresizingFlexibleBottomMargin;

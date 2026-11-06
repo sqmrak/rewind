@@ -1,4 +1,6 @@
 #import "rewind_chrome.h"
+#import "rewind_animation.h"
+#import "rewind_text.h"
 
 #import <QuartzCore/QuartzCore.h>
 #include <objc/message.h>
@@ -382,7 +384,7 @@ static CGFloat RewindChromeGroupedTextInset(void) {
 }
 
 static UILabel *RewindChromeEmbossedLabel(CGFloat size, BOOL bold) {
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.textColor = RewindChromeGroupedCaptionColor();
     label.shadowColor = [UIColor blackColor];
@@ -849,6 +851,9 @@ static UIImage *RewindChromeSwitchFrame(void) {
         return;
     }
     UINavigationController *old = [self selectedNavigation];
+    /* the screen that goes is kept as a picture, which slips away as the new one slips in */
+    UIImageView *leaving = old && old.view.window ? RewindSnapshotOfView(old.view) : nil;
+    int direction = index > _selected ? 1 : -1;
     if (old) {
         [old willMoveToParentViewController:nil];
         [old.view removeFromSuperview];
@@ -860,8 +865,10 @@ static UIImage *RewindChromeSwitchFrame(void) {
     _barHidden = [self barHiddenFor:next upTo:next.topViewController];
     [self layoutContent];
     [self.view insertSubview:next.view belowSubview:_accessory ? _accessory : _bar];
+    if (leaving) [self.view insertSubview:leaving aboveSubview:next.view];
     [next didMoveToParentViewController:self];
     [(RewindChromeTabBar *)_bar setSelected:index];
+    RewindSwapViews(leaving, next.view, direction);
 }
 
 - (void)layoutContent {

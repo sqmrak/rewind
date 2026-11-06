@@ -23,7 +23,7 @@ static NSString *RewindArtistImageURL(NSString *url) {
 }
 
 static UILabel *RewindArtistLabel(CGFloat size, RewindWeight weight, UIColor *color) {
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.font = RewindFont(size, weight);
     label.textColor = color;

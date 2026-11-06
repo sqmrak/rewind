@@ -16,6 +16,7 @@
 #import "rewind_l10n.h"
 #import "rewind_account.h"
 #import "rewind_download.h"
+#import "rewind_animation.h"
 #import "rewind_ui.h"
 
 static NSString *PlayerTime(NSUInteger seconds) {
@@ -236,7 +237,7 @@ static void RewindPlayerTint(UIImage *image, UIColor **top, UIColor **bottom) {
                                                                     @selector(backPressed));
     _gradient = [[CAGradientLayer layer] retain];
     [self.view.layer insertSublayer:_gradient atIndex:0];
-    _status = [[UILabel alloc] initWithFrame:CGRectZero];
+    _status = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _status.backgroundColor = [UIColor clearColor];
     _status.textColor = [UIColor whiteColor];
     _status.textAlignment = NSTextAlignmentCenter;
@@ -334,7 +335,7 @@ static void RewindPlayerTint(UIImage *image, UIColor **top, UIColor **bottom) {
         artwork.autoresizingMask = UIViewAutoresizingFlexibleRightMargin;
         [cell.contentView addSubview:artwork];
 
-        UILabel *title = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+        UILabel *title = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
         title.tag = 3002;
         title.backgroundColor = [UIColor clearColor];
         title.textColor = RewindColorText();
@@ -343,7 +344,7 @@ static void RewindPlayerTint(UIImage *image, UIColor **top, UIColor **bottom) {
         title.autoresizingMask = UIViewAutoresizingFlexibleWidth;
         [cell.contentView addSubview:title];
 
-        UILabel *detail = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+        UILabel *detail = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
         detail.tag = 3003;
         detail.backgroundColor = [UIColor clearColor];
         detail.textColor = [UIColor colorWithWhite:1.0f alpha:0.7f];
@@ -495,7 +496,7 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
 }
 
 - (UILabel *)addLabel:(UIFont *)font color:(UIColor *)color {
-    UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
+    UILabel *label = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     label.backgroundColor = [UIColor clearColor];
     label.textColor = color;
     label.font = font;
@@ -980,13 +981,13 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
         [_panelArt setCornerRadius:RW(4.0f)];
         [_panelArt setURL:_player.track.thumbnailURL];
         [_panel addSubview:_panelArt];
-        _panelTitle = [[UILabel alloc] initWithFrame:CGRectZero];
+        _panelTitle = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
         _panelTitle.backgroundColor = [UIColor clearColor];
         _panelTitle.textColor = RewindColorText();
         _panelTitle.font = RewindFont(18.0f, RewindWeightBold);
         _panelTitle.text = _player.track.title;
         [_panel addSubview:_panelTitle];
-        _panelArtist = [[UILabel alloc] initWithFrame:CGRectZero];
+        _panelArtist = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
         _panelArtist.backgroundColor = [UIColor clearColor];
         _panelArtist.textColor = RewindColorTextSecondary();
         _panelArtist.font = RewindFont(15.0f, RewindWeightRegular);
@@ -1044,7 +1045,7 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
         [self.view setNeedsLayout];
         [self.view layoutIfNeeded];
         _panel.transform = CGAffineTransformMakeTranslation(0, self.view.bounds.size.height);
-        RewindSpring(0.43, ^{ _panel.transform = CGAffineTransformIdentity; }, nil);
+        RewindAnimateView(_panel, CGAffineTransformIdentity, 1.0f, REWIND_MOTION_ENTER, nil);
     }
     for (NSUInteger index = 0; index < 3; ++index) {
         UIButton *button = (UIButton *)[_panel viewWithTag:410 + (NSInteger)index];
@@ -1238,8 +1239,8 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
     _panel = nil;
     _selectedTab = -1;
     [self.view setNeedsLayout];
-    RewindAnimate(0.22, ^{ panel.transform = CGAffineTransformMakeTranslation(0, panel.bounds.size.height); },
-                  ^(BOOL finished) { (void)finished; [panel removeFromSuperview]; [panel release]; });
+    RewindAnimateView(panel, CGAffineTransformMakeTranslation(0, panel.bounds.size.height), 1.0f, REWIND_MOTION_SHEET_DISMISS,
+                      ^(BOOL finished) { (void)finished; [panel removeFromSuperview]; [panel release]; });
     [_panelBackground release]; _panelBackground = nil;
     [_panelTitle release]; _panelTitle = nil;
     [_panelPlay release]; _panelPlay = nil;
@@ -1289,7 +1290,7 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
                 NSString *shown = _showingTranslation && index < _translatedLines.count
                     ? [_translatedLines objectAtIndex:index] : line.text;
                 CGFloat textH = RewindTextSize(shown, font, width - inset * 2.0f).height;
-                UILabel *label = [[[UILabel alloc] initWithFrame:
+                UILabel *label = [[[RewindTextLabel alloc] initWithFrame:
                                     CGRectMake(inset, y, width - inset * 2.0f, MAX(RW(32.0f), textH + RW(4.0f)))] autorelease];
                 label.tag = 5000 + (NSInteger)index;
                 label.backgroundColor = [UIColor clearColor];
@@ -1329,7 +1330,7 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
 }
 
 - (void)addPanelStatus:(NSString *)text atY:(CGFloat)y {
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectMake(RW(24.0f), y,
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectMake(RW(24.0f), y,
                                 _panelScroll.bounds.size.width - RW(48.0f), RW(60.0f))] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.textColor = RewindColorTextSecondary();

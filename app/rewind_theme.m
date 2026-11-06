@@ -1,4 +1,5 @@
 #import "rewind_theme.h"
+#import "rewind_text.h"
 #import "rewind_l10n.h"
 #import "rewind_chrome.h"
 #import <QuartzCore/QuartzCore.h>
@@ -252,7 +253,7 @@ CGSize RewindTextSize(NSString *text, UIFont *font, CGFloat width) {
     static UILabel *gauge = nil;
     if (!text.length || !font || width < 1.0f) return CGSizeZero;
     if (!gauge) {
-        gauge = [[UILabel alloc] initWithFrame:CGRectZero];
+        gauge = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
         gauge.numberOfLines = 0;
         gauge.lineBreakMode = NSLineBreakByWordWrapping;
         gauge.backgroundColor = [UIColor clearColor];

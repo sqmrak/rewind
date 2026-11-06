@@ -82,7 +82,7 @@ static UIView *RewindNativeSectionHeader(UITableView *table, NSString *title) {
     UIImageView *header = [[[UIImageView alloc] initWithFrame:CGRectMake(0.0f, 0.0f, table.bounds.size.width,
                                                                          RewindNativeHeaderHeight)] autorelease];
     header.image = bar;
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectMake(12.0f, 0.0f, header.bounds.size.width - 24.0f,
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectMake(12.0f, 0.0f, header.bounds.size.width - 24.0f,
                                                                 RewindNativeHeaderHeight - 1.0f)] autorelease];
     label.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     label.backgroundColor = [UIColor clearColor];
@@ -295,9 +295,9 @@ static CGFloat RewindNativeCoverSide(void) {
     _cover.layer.borderWidth = 1.0f;
     _cover.layer.borderColor = [UIColor colorWithWhite:0.0f alpha:0.6f].CGColor;
     [self addSubview:_cover];
-    _title = [[UILabel alloc] initWithFrame:CGRectMake(0.0f, side + 4.0f, side, 17.0f)];
+    _title = [[RewindTextLabel alloc] initWithFrame:CGRectMake(0.0f, side + 4.0f, side, 17.0f)];
     _title.font = RewindChromeFont(13.0f, YES);
-    _detail = [[UILabel alloc] initWithFrame:CGRectMake(0.0f, side + 21.0f, side, 15.0f)];
+    _detail = [[RewindTextLabel alloc] initWithFrame:CGRectMake(0.0f, side + 21.0f, side, 15.0f)];
     _detail.font = RewindChromeFont(11.0f, NO);
     for (UILabel *label in [NSArray arrayWithObjects:_title, _detail, nil]) {
         label.backgroundColor = [UIColor clearColor];
@@ -331,7 +331,7 @@ static CGFloat RewindNativeCoverSide(void) {
         _cover.image = nil;
         _cover.backgroundColor = RewindColorChrome();
         _cover.layer.cornerRadius = 3.0f;
-        UILabel *name = [[[UILabel alloc] initWithFrame:CGRectInset(_cover.bounds, 8.0f, 8.0f)] autorelease];
+        UILabel *name = [[[RewindTextLabel alloc] initWithFrame:CGRectInset(_cover.bounds, 8.0f, 8.0f)] autorelease];
         name.backgroundColor = [UIColor clearColor];
         name.textColor = [UIColor whiteColor];
         name.shadowColor = [UIColor colorWithWhite:0.0f alpha:0.5f];
@@ -490,7 +490,7 @@ static UIImage *RewindNativeKeyImage(BOOL pressed) {
         glyph.layer.shadowRadius = 0.5f;
         glyph.userInteractionEnabled = NO;
         [key addSubview:glyph];
-        UILabel *name = [[[UILabel alloc] initWithFrame:CGRectMake(4.0f, floorf(keyH * 0.5f) + 8.0f, keyW - 8.0f, 16.0f)]
+        UILabel *name = [[[RewindTextLabel alloc] initWithFrame:CGRectMake(4.0f, floorf(keyH * 0.5f) + 8.0f, keyW - 8.0f, 16.0f)]
                          autorelease];
         name.backgroundColor = [UIColor clearColor];
         name.textColor = [UIColor whiteColor];
@@ -565,7 +565,7 @@ static UIImage *RewindNativeKeyImage(BOOL pressed) {
 
 - (void)showStatus:(NSString *)text {
     if (!_status) {
-        _status = [[UILabel alloc] initWithFrame:CGRectMake(20.0f, 60.0f + (_searchBar ? 44.0f : 0.0f),
+        _status = [[RewindTextLabel alloc] initWithFrame:CGRectMake(20.0f, 60.0f + (_searchBar ? 44.0f : 0.0f),
                                                             MAX(40.0f, self.view.bounds.size.width - 40.0f), 60.0f)];
         _status.backgroundColor = [UIColor clearColor];
         _status.textColor = RewindColorTextSecondary();
@@ -971,7 +971,7 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
 }
 
 - (UILabel *)labelWithSize:(CGFloat)size bold:(BOOL)bold color:(UIColor *)color align:(NSTextAlignment)align {
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.textColor = color;
     label.textAlignment = align;
@@ -2016,10 +2016,10 @@ static NSString *RewindNativeClock(NSTimeInterval seconds) {
     _art.layer.borderWidth = 1.0f;
     _art.layer.borderColor = [UIColor blackColor].CGColor;
     [self addSubview:_art];
-    _title = [[UILabel alloc] initWithFrame:CGRectZero];
+    _title = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _title.font = RewindChromeFont(14.0f, YES);
     _title.textColor = [UIColor whiteColor];
-    _artist = [[UILabel alloc] initWithFrame:CGRectZero];
+    _artist = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _artist.font = RewindChromeFont(12.0f, NO);
     _artist.textColor = [UIColor colorWithWhite:0.7f alpha:1.0f];
     for (UILabel *label in [NSArray arrayWithObjects:_title, _artist, nil]) {

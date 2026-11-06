@@ -16,6 +16,7 @@
 #import "rewind_l10n.h"
 #import "rewind_player.h"
 #import "rewind_theme.h"
+#import "rewind_animation.h"
 #import "rewind_ui.h"
 #import "settings_vc.h"
 
@@ -28,7 +29,7 @@ static NSString *RewindExploreID(void) { return @"FEmusic_explore"; }
 static CGFloat RewindBottomHeight(void) { return RW(56.0f) + RewindBottomSafeInset(); }
 
 static UILabel *RewindLabel(CGFloat size, RewindWeight weight, UIColor *color) {
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.font = RewindFont(size, weight);
     label.textColor = color;
@@ -394,6 +395,10 @@ static NSArray *RewindPlayableTracks(NSArray *items) {
         [_content setContentOffset:CGPointZero animated:YES];
         return;
     }
+    /* what is on the screen is kept as a picture while the new tab is built under it, and slips away as the new one slips in */
+    UIImageView *leaving = _content.window ? RewindSnapshotOfView(_content) : nil;
+    if (leaving) [_content.superview insertSubview:leaving aboveSubview:_content];
+    int direction = tab > _selectedTab ? 1 : -1;
     _selectedTab = tab;
     _visibleShelfCount = 6;
     [self updateTabs];
@@ -401,6 +406,7 @@ static NSArray *RewindPlayableTracks(NSArray *items) {
     [_content setContentOffset:CGPointZero animated:NO];
     [self rebuildContent];
     [self.view setNeedsLayout];
+    RewindSwapViews(leaving, _content, direction);
     if (tab == RewindTabExplore && !_exploreShelves) [self loadExplore];
     if (tab == RewindTabLibrary) [self loadLibrary];
 }
@@ -1870,7 +1876,7 @@ static const NSUInteger RewindBrowsePageRows = 8;
     if (!text.length) return nil;
     UIView *header = [[[UIView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width, RW(44.0f))] autorelease];
     header.backgroundColor = RewindColorBackground();
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectMake(RW(16.0f), RW(10.0f),
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectMake(RW(16.0f), RW(10.0f),
                                                                  tableView.bounds.size.width - RW(32.0f), RW(30.0f))] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.textColor = RewindColorText();

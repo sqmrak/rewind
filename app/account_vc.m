@@ -1,4 +1,5 @@
 #import "account_vc.h"
+#import "rewind_text.h"
 
 /* ios 5 sdk uses UIKit names for these text enums */
 #if __IPHONE_OS_VERSION_MAX_ALLOWED < 60000
@@ -52,7 +53,7 @@ static UIButton *RewindLoginButton(id target, SEL action) {
 }
 
 static UILabel *RewindLoginLabel(UIFont *font) {
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.font = font;
     label.numberOfLines = 0;

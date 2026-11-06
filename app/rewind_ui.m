@@ -7,6 +7,7 @@
 #import "rewind_image_cache.h"
 #import "rewind_theme.h"
 #import "rewind_l10n.h"
+#import "rewind_animation.h"
 
 void RewindAnimate(NSTimeInterval duration, void (^animations)(void), void (^completion)(BOOL finished)) {
     [UIView animateWithDuration:duration delay:0.0
@@ -90,17 +91,9 @@ NSString *RewindImageURLForSize(NSString *url, CGFloat pixels) {
     BOOL changed = highlighted != self.highlighted;
     [super setHighlighted:highlighted];
     if (!changed || !_pressScales) return;
-    if (highlighted) {
-        RewindAnimate(0.10, ^{
-            self.transform = CGAffineTransformMakeScale(0.96f, 0.96f);
-            self.alpha = 0.82f;
-        }, nil);
-    } else {
-        RewindSpring(0.35, ^{
-            self.transform = CGAffineTransformIdentity;
-            self.alpha = 1.0f;
-        }, nil);
-    }
+    /* the shrink and the spring back past the size are the bounce of the motion engine; the dimming is a plain fade */
+    RewindBounceView(self, highlighted, 0.04f);
+    RewindAnimate(highlighted ? 0.10 : 0.25, ^{ self.alpha = highlighted ? 0.82f : 1.0f; }, nil);
 }
 
 @end
@@ -203,7 +196,7 @@ NSString *RewindImageURLForSize(NSString *url, CGFloat pixels) {
     _icon = [[UIImageView alloc] initWithFrame:CGRectZero];
     _icon.contentMode = UIViewContentModeCenter;
     [self addSubview:_icon];
-    _label = [[UILabel alloc] initWithFrame:CGRectZero];
+    _label = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _label.backgroundColor = [UIColor clearColor];
     _label.font = RewindFont(14.0f, RewindWeightMedium);
     [self addSubview:_label];
@@ -290,12 +283,12 @@ static const CGFloat RewindMarqueeHold = 1.4;
     if (!self) return nil;
     self.clipsToBounds = YES;
     self.backgroundColor = [UIColor clearColor];
-    _label = [[UILabel alloc] initWithFrame:CGRectZero];
+    _label = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _label.backgroundColor = [UIColor clearColor];
     _label.numberOfLines = 1;
     _label.lineBreakMode = NSLineBreakByClipping;
     [self addSubview:_label];
-    _labelCopy = [[UILabel alloc] initWithFrame:CGRectZero];
+    _labelCopy = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _labelCopy.backgroundColor = [UIColor clearColor];
     _labelCopy.numberOfLines = 1;
     _labelCopy.lineBreakMode = NSLineBreakByClipping;
@@ -597,12 +590,12 @@ static CGFloat RewindChipTopPadding(void) { return RW(12.0f); }
     _avatar.hidden = YES;
     _avatar.userInteractionEnabled = NO;
     [self addSubview:_avatar];
-    _caption = [[UILabel alloc] initWithFrame:CGRectZero];
+    _caption = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _caption.backgroundColor = [UIColor clearColor];
     _caption.font = RewindFont(14.0f, RewindWeightRegular);
     _caption.textColor = RewindColorTextSecondary();
     [self addSubview:_caption];
-    _title = [[UILabel alloc] initWithFrame:CGRectZero];
+    _title = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _title.backgroundColor = [UIColor clearColor];
     _title.font = RewindFont(24.0f, RewindWeightBold);
     _title.textColor = RewindColorHeading();
@@ -862,13 +855,13 @@ static CGFloat RewindChipTopPadding(void) { return RW(12.0f); }
     [self addSubview:_playingShade];
     _equalizer = [[RewindEqualizerView alloc] initWithFrame:CGRectZero];
     [_playingShade addSubview:_equalizer];
-    _title = [[UILabel alloc] initWithFrame:CGRectZero];
+    _title = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _title.backgroundColor = [UIColor clearColor];
     _title.font = RewindFont(16.0f, RewindWeightRegular);
     _title.textColor = RewindColorText();
     _title.lineBreakMode = NSLineBreakByTruncatingTail;
     [self addSubview:_title];
-    _detail = [[UILabel alloc] initWithFrame:CGRectZero];
+    _detail = [[RewindTextLabel alloc] initWithFrame:CGRectZero];
     _detail.backgroundColor = [UIColor clearColor];
     _detail.font = RewindFont(14.0f, RewindWeightRegular);
     _detail.textColor = RewindColorTextSecondary();
@@ -1020,14 +1013,14 @@ static void rewind_sheet_set_rect(UIView *view, CGRect rect) {
     [_header removeFromSuperview];
     [_header release];
     _header = [[UIView alloc] initWithFrame:CGRectZero];
-    UILabel *titleLabel = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *titleLabel = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     titleLabel.tag = 1;
     titleLabel.backgroundColor = [UIColor clearColor];
     titleLabel.font = RewindFont(18.0f, RewindWeightMedium);
     titleLabel.textColor = RewindColorText();
     titleLabel.text = title;
     [_header addSubview:titleLabel];
-    UILabel *subtitleLabel = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *subtitleLabel = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     subtitleLabel.tag = 2;
     subtitleLabel.backgroundColor = [UIColor clearColor];
     subtitleLabel.font = RewindFont(15.0f, RewindWeightRegular);
@@ -1061,7 +1054,7 @@ static void rewind_sheet_set_rect(UIView *view, CGRect rect) {
     icon.tag = 2;
     icon.contentMode = UIViewContentModeCenter;
     [plate addSubview:icon];
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.tag = 3;
     label.backgroundColor = [UIColor clearColor];
     label.font = RewindFont(15.0f, RewindWeightRegular);
@@ -1082,7 +1075,7 @@ static void rewind_sheet_set_rect(UIView *view, CGRect rect) {
     icon.tag = 2;
     icon.contentMode = UIViewContentModeCenter;
     [row addSubview:icon];
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectZero] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectZero] autorelease];
     label.tag = 3;
     label.backgroundColor = [UIColor clearColor];
     label.font = RewindFont(16.0f, RewindWeightRegular);
@@ -1250,10 +1243,12 @@ static void rewind_sheet_set_rect(UIView *view, CGRect rect) {
     [self layoutPanelVisible:NO];
     _laidSize = self.bounds.size;
     _visible = YES;
-    RewindSpring(0.4, ^{
-        _dim.alpha = 1.0f;
-        [self layoutPanelVisible:YES];
-    }, nil);
+    /* the panel is placed where it rests and slides up from below its own height, on the curve of the engine, so a leave that starts during the entry retargets from where it is */
+    [self layoutPanelVisible:YES];
+    _dim.alpha = 0.0f;
+    _panel.transform = CGAffineTransformMakeTranslation(0.0f, _panel.bounds.size.height);
+    RewindAnimateView(_dim, CGAffineTransformIdentity, 1.0f, REWIND_MOTION_ENTER, nil);
+    RewindAnimateView(_panel, CGAffineTransformIdentity, 1.0f, REWIND_MOTION_ENTER, nil);
 }
 
 - (void)dismissThen:(RewindAction)action {
@@ -1261,10 +1256,9 @@ static void rewind_sheet_set_rect(UIView *view, CGRect rect) {
     _dismissing = YES;
     RewindAction after = [[action copy] autorelease];
     [self retain];
-    RewindAnimate(0.22, ^{
-        _dim.alpha = 0.0f;
-        _panel.center = CGPointMake(_panel.center.x, self.bounds.size.height + _panel.bounds.size.height * 0.5f);
-    }, ^(BOOL finished) {
+    RewindAnimateView(_dim, CGAffineTransformIdentity, 0.0f, REWIND_MOTION_SHEET_DISMISS, nil);
+    /* from wherever the panel is, which a drag may have moved, down past the bottom edge */
+    RewindAnimateView(_panel, CGAffineTransformMakeTranslation(0.0f, self.bounds.size.height - _panel.frame.origin.y + RW(8.0f)), 1.0f, REWIND_MOTION_SHEET_DISMISS, ^(BOOL finished) {
         (void)finished;
         [self removeFromSuperview];
         if (after) after();
@@ -1343,7 +1337,7 @@ void RewindShowToast(UIView *host, NSString *text, CGFloat bottomInset) {
     toast.userInteractionEnabled = NO;
     toast.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin |
                              UIViewAutoresizingFlexibleRightMargin;
-    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectInset(toast.bounds, RW(16.0f), 0.0f)] autorelease];
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectInset(toast.bounds, RW(16.0f), 0.0f)] autorelease];
     label.backgroundColor = [UIColor clearColor];
     label.font = font;
     label.textColor = RewindColorText();
@@ -1353,13 +1347,9 @@ void RewindShowToast(UIView *host, NSString *text, CGFloat bottomInset) {
     toast.alpha = 0.0f;
     toast.transform = CGAffineTransformMakeTranslation(0.0f, RW(16.0f));
     [host addSubview:toast];
-    RewindSpring(0.35, ^{
-        toast.alpha = 1.0f;
-        toast.transform = CGAffineTransformIdentity;
-    }, ^(BOOL finished) {
+    RewindAnimateView(toast, CGAffineTransformIdentity, 1.0f, RewindPopupCurve(YES), ^(BOOL finished) {
         (void)finished;
-        [UIView animateWithDuration:0.25 delay:2.4 options:UIViewAnimationOptionCurveEaseIn
-                         animations:^{ toast.alpha = 0.0f; }
-                         completion:^(BOOL done) { (void)done; [toast removeFromSuperview]; }];
+        RewindAnimateViewAfter(toast, CGAffineTransformMakeTranslation(0.0f, RW(8.0f)), 0.0f, RewindPopupCurve(NO), 2.4,
+                               ^(BOOL done) { (void)done; [toast removeFromSuperview]; });
     });
 }
