@@ -1748,6 +1748,41 @@ static void RewindPublicPlaylistPage(NSString *apiKey, NSString *playlistID, NSD
     });
 }
 
+- (void)trackForVideoID:(NSString *)videoID completion:(void (^)(RewindTrack *track, NSError *error))completion {
+    if (!completion) return;
+    if (!rewind_audio_video_id([videoID UTF8String])) {
+        completion(nil, RewindError(6, @"invalid video id"));
+        return;
+    }
+    NSString *asked = [[videoID copy] autorelease];
+    RewindWebCall(@"next", _apiKey, [NSDictionary dictionaryWithObjectsAndKeys:
+                                     asked, @"videoId", @YES, @"isAudioOnly", nil],
+                  ^(NSDictionary *root, NSError *error) {
+        if (error) {
+            completion(nil, error);
+            return;
+        }
+        NSDictionary *panel = RewindDict(RewindFindValueForKey(root, @"playlistPanelRenderer", 0));
+        RewindTrack *shown = nil;
+        for (id item in RewindArray([panel objectForKey:@"contents"])) {
+            NSDictionary *renderer = RewindDict([RewindDict(item) objectForKey:@"playlistPanelVideoRenderer"]);
+            RewindTrack *candidate = RewindTrackFromPanelRenderer(renderer);
+            if (!candidate) continue;
+            if ([[renderer objectForKey:@"selected"] boolValue] || [candidate.videoID isEqualToString:asked]) {
+                shown = candidate;
+                break;
+            }
+        }
+        if (!shown) {
+            completion(nil, RewindError(RewindErrorPlaylistUnavailable, @"watch panel has no such track"));
+            return;
+        }
+        completion([[[RewindTrack alloc] initWithVideoID:asked title:shown.title artist:shown.artist album:shown.album
+                                            thumbnailURL:shown.thumbnailURL duration:shown.duration
+                                              playlistID:nil artistID:shown.artistID resultType:nil] autorelease], nil);
+    });
+}
+
 - (void)playlistTracksForID:(NSString *)playlistID completion:(RewindSearchCompletion)completion {
     if (!completion) return;
     if (!playlistID.length) { completion(nil, RewindError(13, @"playlist has no id")); return; }

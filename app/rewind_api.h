@@ -192,6 +192,9 @@ typedef void (^RewindLyricsCompletion)(RewindLyrics *lyrics, NSError *error);
 - (RewindAudioRequest *)streamURLForTrack:(RewindTrack *)track excludingSources:(NSSet *)sources
               completion:(RewindAudioCompletion)completion;
 - (void)playlistTracksForID:(NSString *)playlistID completion:(RewindSearchCompletion)completion;
+/* the track a youtube video id names, with the title and artist of its watch panel; the id stays the one asked for, as the panel may show the
+   audio counterpart of a clip under another id */
+- (void)trackForVideoID:(NSString *)videoID completion:(void (^)(RewindTrack *track, NSError *error))completion;
 - (void)artistPageForID:(NSString *)artistID completion:(RewindArtistPageCompletion)completion;
 
 /* public youtube music pages: home and its mood chips, explore, moods, charts, albums */

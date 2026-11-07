@@ -90,7 +90,7 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     return YES;
 }
 
-/* a link tapped in another app arrives as rewind://www.youtube.com/watch?...; ios 5 to 8 only call this variant */
+/* a link tapped in another app (a playlist or a track) arrives as rewind://www.youtube.com/watch?...; ios 5 to 8 only call this variant */
 - (BOOL)application:(UIApplication *)application openURL:(NSURL *)url
   sourceApplication:(NSString *)sourceApplication annotation:(id)annotation {
     (void)application; (void)sourceApplication; (void)annotation;
@@ -98,7 +98,7 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     UINavigationController *navigation = [root isKindOfClass:[RewindChromeTabsController class]]
         ? [(RewindChromeTabsController *)root selectedNavigation]
         : [root isKindOfClass:[UINavigationController class]] ? (UINavigationController *)root : nil;
-    return RewindOpenPlaylistLink([url absoluteString], navigation, RewindAppPlayer, RewindAppAPI);
+    return RewindOpenLink([url absoluteString], navigation, RewindAppPlayer, RewindAppAPI);
 }
 
 - (void)updateIdleTimer {
