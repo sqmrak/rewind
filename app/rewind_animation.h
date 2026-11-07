@@ -10,6 +10,13 @@ BOOL RewindReduceMotionEnabled(void);
 void RewindAnimateView(UIView *view, CGAffineTransform transform, CGFloat alpha, rewind_motion_curve curve, void (^completion)(BOOL finished));
 void RewindAnimateViewAfter(UIView *view, CGAffineTransform transform, CGFloat alpha, rewind_motion_curve curve, NSTimeInterval delay, void (^completion)(BOOL finished));
 
+/* the view is already in its final state; this plays the way in from a transform and an alpha without touching it, and a later call replaces a run that has not ended. The
+   curve follows the theme like every other: the spring of a spring request is the expressive one in the material theme */
+void RewindAnimateEnter(UIView *view, CGAffineTransform from, CGFloat fromAlpha, rewind_motion_curve curve);
+/* the pop of a control that turns on or changes its glyph: it swells from a fraction of its size and settles past its size and back. only the material theme moves; the
+   skeuomorphic theme keeps its plain state change */
+void RewindPopView(UIView *view, CGFloat from);
+
 /* a card with rounded corners that clip its rows, or with a shadow, is drawn off screen again on every frame it moves, and an old gpu cannot keep up. drawn once into a bitmap it
    moves and fades as a picture; the bitmap is dropped when the move ends, since a card that changes inside a cache is drawn twice */
 void RewindCacheForMotion(UIView *view);

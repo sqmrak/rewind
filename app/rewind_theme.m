@@ -37,20 +37,23 @@ static unsigned RewindPick(unsigned material, unsigned skeuomorphic) {
 
 UIColor *RewindColorBackground(void) { return RewindHex(RewindPick(0x000000, 0x161616), 1.0f); }
 UIColor *RewindColorCanvas(void) { return RewindColorBackground(); }
-UIColor *RewindColorSurface(void) { return RewindHex(RewindPick(0x1a1a1a, 0x222222), 1.0f); }
-UIColor *RewindColorSurfaceHigh(void) { return RewindHex(RewindPick(0x272727, 0x303030), 1.0f); }
+UIColor *RewindColorSurface(void) { return RewindHex(RewindPick(0x1d1d1d, 0x222222), 1.0f); }
+UIColor *RewindColorSurfaceHigh(void) { return RewindHex(RewindPick(0x282828, 0x303030), 1.0f); }
 UIColor *RewindColorOverlay(void) {
     return RewindCurrentTheme() == RewindThemeSkeuomorphic ? [UIColor colorWithWhite:1.0f alpha:0.08f]
                                                            : [UIColor colorWithWhite:1.0f alpha:0.10f];
 }
-UIColor *RewindColorDivider(void) { return RewindHex(RewindPick(0x333333, 0x3a3a3a), 1.0f); }
+/* youtube music draws its dividers as white at 8 percent, so they follow the surface under them */
+UIColor *RewindColorDivider(void) {
+    return RewindCurrentTheme() == RewindThemeSkeuomorphic ? RewindHex(0x3a3a3a, 1.0f) : [UIColor colorWithWhite:1.0f alpha:0.08f];
+}
 UIColor *RewindColorText(void) { return RewindHex(RewindPick(0xffffff, 0xffffff), 1.0f); }
 UIColor *RewindColorTextSecondary(void) { return RewindHex(RewindPick(0xaaaaaa, 0xa4a4a9), 1.0f); }
 UIColor *RewindColorTextTertiary(void) { return RewindHex(RewindPick(0x717171, 0x707075), 1.0f); }
 UIColor *RewindColorLink(void) { return RewindHex(RewindPick(0x3ea6ff, 0xe5483f), 1.0f); }
 /* section titles: plain text on material, the red of the skeuomorphic theme */
 UIColor *RewindColorHeading(void) { return RewindCurrentTheme() == RewindThemeSkeuomorphic ? RewindColorLink() : RewindColorText(); }
-UIColor *RewindColorPlaceholder(void) { return RewindHex(RewindPick(0x212121, 0x2c2c2c), 1.0f); }
+UIColor *RewindColorPlaceholder(void) { return RewindHex(RewindPick(0x232323, 0x2c2c2c), 1.0f); }
 UIColor *RewindColorAccentFill(void) {
     return RewindCurrentTheme() == RewindThemeSkeuomorphic ? RewindHex(0xb82a22, 1.0f) : RewindColorText();
 }
@@ -128,6 +131,40 @@ UIFont *RewindFont(CGFloat dp, RewindWeight weight) {
     return weight == RewindWeightRegular ? [UIFont systemFontOfSize:size] : [UIFont boldSystemFontOfSize:size];
 }
 
+/* the modern theme draws these glyphs with the youtube music set; any other name keeps its own mask */
+static NSString *RewindYouTubeMusicIconName(NSString *name) {
+    static NSDictionary *names;
+    if (!names) {
+        names = [[NSDictionary alloc] initWithObjectsAndKeys:
+            @"outline-experimental-home", @"home", @"fill-experimental-home", @"home-on",
+            @"outline-experimental-search", @"search",
+            @"outline-experimental-compass", @"explore", @"fill-experimental-compass", @"explore-on",
+            @"outline-library-music", @"library", @"fill-library-music", @"library-on",
+            @"fill-experimental-play", @"play", @"fill-experimental-pause", @"pause",
+            @"fill-experimental-skip-next", @"next", @"fill-experimental-skip-previous", @"prev",
+            @"outline-experimental-shuffle", @"shuffle", @"outline-experimental-repeat", @"repeat",
+            @"outline-experimental-repeat1", @"repeat-one",
+            @"outline-experimental-thumb-up", @"thumb-up", @"fill-experimental-thumb-up", @"thumb-up-on",
+            @"outline-experimental-thumb-down", @"thumb-down", @"fill-experimental-thumb-down", @"thumb-down-on",
+            @"outline-experimental-overflow-vertical", @"more", @"outline-experimental-x", @"close",
+            @"outline-experimental-arrow-left", @"back", @"outline-experimental-download", @"download",
+            @"outline-experimental-share", @"share", @"outline-experimental-add", @"add",
+            @"outline-experimental-trash-can", @"delete", @"outline-experimental-history", @"history",
+            @"outline-experimental-info-circle", @"info", @"outline-experimental-gear", @"settings",
+            @"outline-experimental-chevron-down", @"chevron-down", @"outline-experimental-chevron-right", @"chevron-right",
+            @"outline-experimental-playlist-add", @"playlist-add", @"outline-experimental-queue-last", @"queue-add",
+            @"outline-experimental-queue-next", @"play-next", @"outline-experimental-sleep-timer", @"sleep",
+            @"outline-experimental-mix", @"mix", @"outline-experimental-bookmark", @"save",
+            @"outline-experimental-album", @"album", @"outline-experimental-translate", @"translate",
+            @"outline-experimental-send", @"send", @"outline-experimental-help-circle", @"help",
+            @"fill-experimental-explicit", @"explicit", @"outline-music-shape", @"note",
+            @"outline-experimental-person-circle", @"avatar", @"outline-list-remove", @"queue-clear",
+            @"outline-experimental-trending", @"charts", @"outline-experimental-arrow-up-left", @"fill-query",
+            @"outline-person-music", @"artist", @"outline-experimental-face-happy", @"moods", nil];
+    }
+    return [names objectForKey:name];
+}
+
 UIImage *RewindIcon(NSString *name, CGFloat points, UIColor *color) {
     static NSCache *cache;
     if (!cache) {
@@ -140,11 +177,15 @@ UIImage *RewindIcon(NSString *name, CGFloat points, UIColor *color) {
         CGFloat white = 1;
         if ([color getWhite:&white alpha:&a]) r = g = b = white;
     }
-    NSString *key = [NSString stringWithFormat:@"%@|%.1f|%.3f,%.3f,%.3f,%.3f", name, points, r, g, b, a];
+    /* the theme is part of the key: the same name draws from a different set in each */
+    NSString *key = [NSString stringWithFormat:@"%d|%@|%.1f|%.3f,%.3f,%.3f,%.3f", (int)RewindCurrentTheme(), name, points, r, g, b, a];
     UIImage *hit = [cache objectForKey:key];
     if (hit) return hit;
 
-    NSString *path = [[NSBundle mainBundle] pathForResource:[@"ic-" stringByAppendingString:name] ofType:@"png"];
+    NSString *path = nil;
+    NSString *youtubeMusic = RewindCurrentTheme() == RewindThemeSkeuomorphic ? nil : RewindYouTubeMusicIconName(name);
+    if (youtubeMusic) path = [[NSBundle mainBundle] pathForResource:[@"ic-ytm-" stringByAppendingString:youtubeMusic] ofType:@"png"];
+    if (!path) path = [[NSBundle mainBundle] pathForResource:[@"ic-" stringByAppendingString:name] ofType:@"png"];
     UIImage *mask = path ? [UIImage imageWithContentsOfFile:path] : nil;
     if (!mask) return nil;
     CGRect rect = CGRectMake(0.0f, 0.0f, points, points);
@@ -218,7 +259,8 @@ UIBarButtonItem *RewindIconBarItem(NSString *icon, id target, SEL action) {
         return RewindChromeBarItem(nil, RewindIcon(icon, 20.0f, [UIColor whiteColor]), NO, target, action);
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.frame = CGRectMake(0.0f, 0.0f, 40.0f, 40.0f);
-    button.showsTouchWhenHighlighted = YES;
+    /* showsTouchWhenHighlighted draws a system glow around the glyph, and it stays when a pushed page pops back under the finger that tapped Done */
+    button.adjustsImageWhenHighlighted = YES;
     [button setImage:RewindIcon(icon, RW(24.0f), RewindColorText()) forState:UIControlStateNormal];
     [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
     return [[[UIBarButtonItem alloc] initWithCustomView:button] autorelease];

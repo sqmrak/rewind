@@ -383,8 +383,11 @@ static NSArray *RewindPlayableTracks(NSArray *items) {
         UIView *tab = [_tabs objectAtIndex:index];
         BOOL selected = index == (NSUInteger)_selectedTab;
         NSString *icon = [[names objectAtIndex:index] stringByAppendingString:selected ? @"-on" : @""];
-        ((UIImageView *)[tab viewWithTag:1]).image = RewindIcon(icon, RW(24.0f),
-                                          selected ? RewindColorText() : RewindColorTextSecondary());
+        UIImageView *glyph = (UIImageView *)[tab viewWithTag:1];
+        BOOL wasSelected = (tab.accessibilityTraits & UIAccessibilityTraitSelected) != 0;
+        tab.accessibilityTraits = UIAccessibilityTraitButton | (selected ? UIAccessibilityTraitSelected : 0);
+        glyph.image = RewindIcon(icon, RW(24.0f), selected ? RewindColorText() : RewindColorTextSecondary());
+        if (selected && !wasSelected) RewindPopView(glyph, 0.7f);
         ((UILabel *)[tab viewWithTag:2]).textColor = selected ? RewindColorText() : RewindColorTextSecondary();
     }
 }

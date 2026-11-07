@@ -152,15 +152,43 @@ NSString *RewindImageURLForSize(NSString *url, CGFloat pixels) {
 
 - (void)setIconName:(NSString *)name {
     if ([_iconName isEqualToString:name]) return;
+    BOOL swap = _iconName && self.window && _icon.image && RewindCurrentTheme() != RewindThemeSkeuomorphic &&
+                !RewindReduceMotionEnabled();
+    UIImageView *old = nil;
+    if (swap) {
+        /* the glyph that leaves shrinks away while the new one springs in, like the symbol change of the exteria editor */
+        old = [[[UIImageView alloc] initWithImage:_icon.image] autorelease];
+        old.frame = _icon.frame;
+        old.contentMode = UIViewContentModeCenter;
+        old.userInteractionEnabled = NO;
+        [self insertSubview:old aboveSubview:_icon];
+    }
     [_iconName release];
     _iconName = [name copy];
     [self refreshIcon];
+    if (old) {
+        RewindPopView(_icon, 0.4f);
+        RewindAnimateView(old, CGAffineTransformMakeScale(0.4f, 0.4f), 0.0f, REWIND_MOTION_DISMISS, ^(BOOL finished) {
+            (void)finished;
+            [old removeFromSuperview];
+        });
+    }
+}
+
+static CGFloat RewindColorLuma(UIColor *color) {
+    CGFloat r = 1, g = 1, b = 1, a = 1, white = 1;
+    if ([color getRed:&r green:&g blue:&b alpha:&a]) return (0.3f * r + 0.59f * g + 0.11f * b) * a;
+    if ([color getWhite:&white alpha:&a]) return white * a;
+    return 1.0f;
 }
 
 - (void)setIconColor:(UIColor *)color {
+    /* a toggle that lights up (shuffle on) pops; one that dims, or a theme recolour, only changes colour */
+    BOOL lights = _icon.image && self.window && RewindColorLuma(color) > RewindColorLuma(_iconColor) + 0.15f;
     [_iconColor release];
     _iconColor = [color retain];
     [self refreshIcon];
+    if (lights) RewindPopView(_icon, 0.82f);
 }
 
 - (void)layoutSubviews {
@@ -559,10 +587,14 @@ static CGFloat RewindChipTopPadding(void) { return RW(12.0f); }
 }
 
 - (void)setSelectedIndex:(NSInteger)index animated:(BOOL)animated {
+    NSInteger previous = _selectedIndex;
     _selectedIndex = index;
     void (^apply)(void) = ^{
         for (UIButton *chip in _chips) [self styleChip:chip selected:chip.tag == index];
     };
+    /* the chip that turns on swells and settles past its size, the pop of a lit button in the exteria editor */
+    if (animated && index >= 0 && index < (NSInteger)_chips.count && index != previous)
+        RewindPopView([_chips objectAtIndex:(NSUInteger)index], 0.9f);
     if (animated) [UIView transitionWithView:self duration:0.2
                                      options:UIViewAnimationOptionTransitionCrossDissolve
                                   animations:apply completion:nil];
@@ -1332,7 +1364,8 @@ void RewindShowToast(UIView *host, NSString *text, CGFloat bottomInset) {
     UIView *toast = [[[UIView alloc] initWithFrame:CGRectMake(floorf((host.bounds.size.width - width) * 0.5f),
                                                               host.bounds.size.height - bottomInset - height - side,
                                                               width, height)] autorelease];
-    toast.backgroundColor = [UIColor colorWithRed:0.20f green:0.20f blue:0.20f alpha:1.0f];
+    /* the snackbar grey of youtube music, 0x323232 */
+    toast.backgroundColor = [UIColor colorWithRed:0x32 / 255.0f green:0x32 / 255.0f blue:0x32 / 255.0f alpha:1.0f];
     toast.layer.cornerRadius = RW(4.0f);
     toast.userInteractionEnabled = NO;
     toast.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin |

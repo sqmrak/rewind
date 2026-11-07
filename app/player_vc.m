@@ -26,8 +26,10 @@ static NSString *PlayerTime(NSUInteger seconds) {
 
 /* sample saturated cells, a whole-cover average loses the accent colour */
 static void RewindPlayerTint(UIImage *image, UIColor **top, UIColor **bottom) {
-    *top = [UIColor colorWithWhite:0.16f alpha:1.0f];
-    *bottom = [UIColor colorWithWhite:0.07f alpha:1.0f];
+    BOOL material = RewindCurrentTheme() != RewindThemeSkeuomorphic;
+    /* youtube music rests the player on its raised grey surface when there is no cover colour */
+    *top = material ? RewindColorSurfaceHigh() : [UIColor colorWithWhite:0.16f alpha:1.0f];
+    *bottom = material ? RewindColorSurface() : [UIColor colorWithWhite:0.07f alpha:1.0f];
     CGImageRef source = image.CGImage;
     if (!source) return;
 
@@ -61,6 +63,17 @@ static void RewindPlayerTint(UIImage *image, UIColor **top, UIColor **bottom) {
     }
     if (!found) return;
     CGFloat saturation = MIN(0.75f, MAX(0.35f, bestSaturation));
+    if (material) {
+        /* the cover colour fades into the surface grey, so the controls always sit on a dark, steady base */
+        CGFloat surface = 0x1d / 255.0f;
+        CGFloat r = 0, g = 0, b = 0, a = 1;
+        UIColor *deep = [UIColor colorWithHue:bestHue saturation:saturation brightness:0.30f alpha:1.0f];
+        if (![deep getRed:&r green:&g blue:&b alpha:&a]) return;
+        *top = [UIColor colorWithHue:bestHue saturation:saturation brightness:0.42f alpha:1.0f];
+        *bottom = [UIColor colorWithRed:r * 0.35f + surface * 0.65f green:g * 0.35f + surface * 0.65f
+                                   blue:b * 0.35f + surface * 0.65f alpha:1.0f];
+        return;
+    }
     *top = [UIColor colorWithHue:bestHue saturation:saturation brightness:0.46f alpha:1.0f];
     *bottom = [UIColor colorWithHue:bestHue saturation:saturation brightness:0.16f alpha:1.0f];
 }
@@ -816,7 +829,9 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
                 /* the gradient eases between covers instead of snapping */
                 CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"colors"];
                 fade.fromValue = _background.colors;
-                fade.duration = 0.45;
+                fade.duration = 0.6;
+                /* emphasized decelerate of material 3: the colour arrives early and settles slowly */
+                fade.timingFunction = [CAMediaTimingFunction functionWithControlPoints:0.05f:0.7f:0.1f:1.0f];
                 _background.colors = [NSArray arrayWithObjects:(id)top.CGColor, (id)bottom.CGColor, nil];
                 [_background addAnimation:fade forKey:@"colors"];
                 if (_panelBackground) {

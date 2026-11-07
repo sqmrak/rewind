@@ -41,8 +41,25 @@ void RewindAnimateView(UIView *view, CGAffineTransform transform, CGFloat alpha,
     RewindAnimateViewAfter(view, transform, alpha, curve, 0, completion);
 }
 
+/* the generic curves keep their feel in the skeuomorphic theme; the material theme moves on the youtube music tokens: a spring for things that travel,
+   the emphasized easings for entries and exits */
+static rewind_motion_curve RewindThemedCurve(rewind_motion_curve curve) {
+    if (RewindCurrentTheme() == RewindThemeSkeuomorphic) return curve;
+    switch (curve) {
+    case REWIND_MOTION_ENTER: return REWIND_MOTION_M3_EMPHASIZED_DECELERATE;
+    case REWIND_MOTION_EXIT:
+    case REWIND_MOTION_DISMISS:
+    case REWIND_MOTION_SHEET_DISMISS: return REWIND_MOTION_M3_EMPHASIZED_ACCELERATE;
+    case REWIND_MOTION_NAVIGATION: return REWIND_MOTION_M3_EMPHASIZED;
+    case REWIND_MOTION_LIST_MOVE: return REWIND_MOTION_M3_SPATIAL_FAST;
+    case REWIND_MOTION_SPRING: return REWIND_MOTION_EXPRESSIVE_SPATIAL;
+    default: return curve;
+    }
+}
+
 void RewindAnimateViewAfter(UIView *view, CGAffineTransform transform, CGFloat alpha,
                              rewind_motion_curve curve, NSTimeInterval delay, void (^completion)(BOOL finished)) {
+    curve = RewindThemedCurve(curve);
     CALayer *layer = view.layer;
     CALayer *visible = [layer animationForKey:@"rewind.motion"] ? [layer presentationLayer] : nil;
     CGAffineTransform from = visible ? CATransform3DGetAffineTransform(visible.transform) : view.transform;
@@ -67,15 +84,19 @@ void RewindAnimateViewAfter(UIView *view, CGAffineTransform transform, CGFloat a
         [layer addAnimation:hold forKey:@"rewind.motion"];
         return;
     }
-    NSMutableArray *transforms = [NSMutableArray arrayWithCapacity:MOTION_SAMPLES];
-    NSMutableArray *opacities = [NSMutableArray arrayWithCapacity:MOTION_SAMPLES];
-    for (NSUInteger i = 0; i < MOTION_SAMPLES; ++i) {
-        CGFloat progress = (CGFloat)rewind_motion_progress(curve, (double)i / (MOTION_SAMPLES - 1));
+    /* a key every 4 ms: core animation interpolates linearly between keys, so a frame of a 120 Hz screen never lands between two far apart ones */
+    NSTimeInterval span = rewind_motion_duration(curve);
+    NSUInteger samples = MAX((NSUInteger)2, (NSUInteger)ceil(span * 240.0) + 1);
+    NSMutableArray *transforms = [NSMutableArray arrayWithCapacity:samples];
+    NSMutableArray *opacities = [NSMutableArray arrayWithCapacity:samples];
+    for (NSUInteger i = 0; i < samples; ++i) {
+        CGFloat progress = (CGFloat)rewind_motion_progress(curve, (double)i / (samples - 1));
         CGAffineTransform value = CGAffineTransformMake(
             from.a + (transform.a - from.a) * progress, from.b + (transform.b - from.b) * progress,
             from.c + (transform.c - from.c) * progress, from.d + (transform.d - from.d) * progress,
             from.tx + (transform.tx - from.tx) * progress, from.ty + (transform.ty - from.ty) * progress);
         [transforms addObject:[NSValue valueWithCATransform3D:CATransform3DMakeAffineTransform(value)]];
+        /* opacity never overshoots, even when the position of a spring does */
         CGFloat opacity = fromAlpha + (alpha - fromAlpha) * MIN(1, MAX(0, progress));
         [opacities addObject:[NSNumber numberWithDouble:opacity]];
     }
@@ -85,7 +106,7 @@ void RewindAnimateViewAfter(UIView *view, CGAffineTransform transform, CGFloat a
     CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
     fade.values = opacities;
     CAAnimationGroup *group = [CAAnimationGroup animation];
-    group.duration = rewind_motion_duration(curve);
+    group.duration = span;
     movement.duration = fade.duration = group.duration;
     group.animations = [NSArray arrayWithObjects:movement, fade, nil];
     group.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
@@ -95,6 +116,44 @@ void RewindAnimateViewAfter(UIView *view, CGAffineTransform transform, CGFloat a
     }
     if (completion) group.delegate = (id)[[[RewindMotionCompletion alloc] initWithCompletion:completion] autorelease];
     [layer addAnimation:group forKey:@"rewind.motion"];
+}
+
+void RewindAnimateEnter(UIView *view, CGAffineTransform from, CGFloat fromAlpha, rewind_motion_curve curve) {
+    CALayer *layer = view.layer;
+    CGAffineTransform to = view.transform;
+    CGFloat toAlpha = view.alpha;
+    [layer removeAnimationForKey:@"rewind.enter"];
+    if (!(view.window || view.superview) || ![UIView areAnimationsEnabled] || RewindReduceMotionEnabled()) return;
+    curve = RewindThemedCurve(curve);
+    NSTimeInterval span = rewind_motion_duration(curve);
+    NSUInteger samples = MAX((NSUInteger)2, (NSUInteger)ceil(span * 240.0) + 1);
+    NSMutableArray *transforms = [NSMutableArray arrayWithCapacity:samples];
+    NSMutableArray *opacities = [NSMutableArray arrayWithCapacity:samples];
+    for (NSUInteger i = 0; i < samples; ++i) {
+        CGFloat progress = (CGFloat)rewind_motion_progress(curve, (double)i / (samples - 1));
+        CGAffineTransform value = CGAffineTransformMake(
+            from.a + (to.a - from.a) * progress, from.b + (to.b - from.b) * progress,
+            from.c + (to.c - from.c) * progress, from.d + (to.d - from.d) * progress,
+            from.tx + (to.tx - from.tx) * progress, from.ty + (to.ty - from.ty) * progress);
+        [transforms addObject:[NSValue valueWithCATransform3D:CATransform3DMakeAffineTransform(value)]];
+        /* a spring overshoots, and an opacity past one is clamped by the layer anyway */
+        [opacities addObject:[NSNumber numberWithDouble:fromAlpha + (toAlpha - fromAlpha) * MIN(1, MAX(0, progress))]];
+    }
+    CAKeyframeAnimation *movement = [CAKeyframeAnimation animationWithKeyPath:@"transform"];
+    movement.values = transforms;
+    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    fade.values = opacities;
+    CAAnimationGroup *group = [CAAnimationGroup animation];
+    group.duration = span;
+    movement.duration = fade.duration = span;
+    group.animations = [NSArray arrayWithObjects:movement, fade, nil];
+    group.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
+    [layer addAnimation:group forKey:@"rewind.enter"];
+}
+
+void RewindPopView(UIView *view, CGFloat from) {
+    if (RewindCurrentTheme() == RewindThemeSkeuomorphic || !view.window) return;
+    RewindAnimateEnter(view, CGAffineTransformMakeScale(from, from), 1.0f, REWIND_MOTION_SPRING);
 }
 
 void RewindCacheForMotion(UIView *view) {
