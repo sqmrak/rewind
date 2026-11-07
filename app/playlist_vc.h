@@ -23,6 +23,9 @@ NSArray *RewindTracksForPlaylist(NSString *name);
 
 /* picker rows: local playlists first, then editable youtube playlists when signed in */
 NSArray *RewindPlaylistPickerTitles(void);
+/* a scrolling sheet of the picker rows; picked gets the chosen row title, or nil for a new playlist. a uialertview
+   with one button per playlist overflows its frame on ipad */
+void RewindShowPlaylistPicker(UIView *host, RewindTrack *track, void (^picked)(NSString *title));
 /* adds to whichever playlist the picker title names; the completion reports youtube failures */
 void RewindAddTrackToPickedPlaylist(RewindTrack *track, NSString *title,
                                     void (^completion)(NSError *error));

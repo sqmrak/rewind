@@ -22,7 +22,7 @@
 #import "settings_vc.h"
 
 enum { RewindTabHome = 0, RewindTabExplore = 1, RewindTabLibrary = 2 };
-enum { RewindAlertPlaylist = 8101, RewindAlertCreatePlaylist = 8102 };
+enum { RewindAlertCreatePlaylist = 8102 };
 
 static NSString *RewindHomeID(void) { return @"FEmusic_home"; }
 static NSString *RewindExploreID(void) { return @"FEmusic_explore"; }
@@ -1472,7 +1472,7 @@ static UIImage *RewindAmbientImage(CGSize size, CGFloat hueA, CGFloat hueB) {
     if (!query.length) return;
     _searchField.text = query;
     [_searchField resignFirstResponder];
-    if (RewindOpenPlaylistLink(query, self.navigationController, _player, _api)) return;
+    if (RewindOpenLink(query, self.navigationController, _player, _api)) return;
     NSMutableArray *history = [NSMutableArray array];
     [history addObject:query];
     NSArray *old = [[NSUserDefaults standardUserDefaults] objectForKey:@"RewindSearchHistory"];
@@ -1656,34 +1656,29 @@ static UIImage *RewindAmbientImage(CGSize size, CGFloat hueA, CGFloat hueB) {
 
 - (void)showPlaylistPicker {
     if (!_actionTrack) return;
-    UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:RewindL(@"menu_add_playlist")
-                                                     message:_actionTrack.title delegate:self
-                                           cancelButtonTitle:RewindL(@"cancel")
-                                           otherButtonTitles:RewindL(@"new_playlist"), nil] autorelease];
-    alert.tag = RewindAlertPlaylist;
-    for (NSString *title in RewindPlaylistPickerTitles()) [alert addButtonWithTitle:title];
-    [alert show];
+    __block MainVC *owner = self;
+    RewindShowPlaylistPicker(self.view, _actionTrack, ^(NSString *title) { [owner pickedPlaylist:title]; });
+}
+
+- (void)pickedPlaylist:(NSString *)title {
+    if (!title) {
+        UIAlertView *create = [[[UIAlertView alloc] initWithTitle:RewindL(@"new_playlist")
+                                                           message:nil delegate:self
+                                                 cancelButtonTitle:RewindL(@"cancel")
+                                                 otherButtonTitles:RewindL(@"create"), nil] autorelease];
+        create.alertViewStyle = UIAlertViewStylePlainTextInput;
+        create.tag = RewindAlertCreatePlaylist;
+        [create show];
+        return;
+    }
+    RewindAddTrackToPickedPlaylist(_actionTrack, title, ^(NSError *error) {
+        RewindShowToast(self.view, error ? RewindFriendlyError(error) : RewindL(@"added_to_playlist"), RewindBottomHeight());
+    });
 }
 
 - (void)alertView:(UIAlertView *)alert clickedButtonAtIndex:(NSInteger)index {
     if (index == alert.cancelButtonIndex) return;
-    if (alert.tag == RewindAlertPlaylist) {
-        if (index == 1) {
-            UIAlertView *create = [[[UIAlertView alloc] initWithTitle:RewindL(@"new_playlist")
-                                                               message:nil delegate:self
-                                                     cancelButtonTitle:RewindL(@"cancel")
-                                                     otherButtonTitles:RewindL(@"create"), nil] autorelease];
-            create.alertViewStyle = UIAlertViewStylePlainTextInput;
-            create.tag = RewindAlertCreatePlaylist;
-            [create show];
-            return;
-        }
-        NSString *title = [alert buttonTitleAtIndex:index];
-        RewindAddTrackToPickedPlaylist(_actionTrack, title, ^(NSError *error) {
-            RewindShowToast(self.view, error ? RewindFriendlyError(error) : RewindL(@"added_to_playlist"),
-                            RewindBottomHeight());
-        });
-    } else if (alert.tag == RewindAlertCreatePlaylist) {
+    if (alert.tag == RewindAlertCreatePlaylist) {
         NSString *title = [[[alert textFieldAtIndex:0] text]
                            stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (!title.length) return;

@@ -12,7 +12,7 @@
 #import "playlist_vc.h"
 #import "player_vc.h"
 
-enum { RewindArtistAlertPlaylist = 9601, RewindArtistAlertCreatePlaylist = 9602 };
+enum { RewindArtistAlertCreatePlaylist = 9602 };
 
 /* youtube sometimes serves channel avatars as scheme-relative urls */
 static NSString *RewindArtistImageURL(NSString *url) {
@@ -578,32 +578,29 @@ static NSArray *RewindArtistPlayableTracks(NSArray *items) {
 
 - (void)showPlaylistPicker {
     if (!_menuTrack) return;
-    UIAlertView *alert = [[[UIAlertView alloc] initWithTitle:RewindL(@"menu_add_playlist")
-                                                     message:_menuTrack.title delegate:self
-                                           cancelButtonTitle:RewindL(@"cancel")
-                                           otherButtonTitles:RewindL(@"new_playlist"), nil] autorelease];
-    alert.tag = RewindArtistAlertPlaylist;
-    for (NSString *title in RewindPlaylistPickerTitles()) [alert addButtonWithTitle:title];
-    [alert show];
+    __block RewindArtistVC *owner = self;
+    RewindShowPlaylistPicker(self.view, _menuTrack, ^(NSString *title) { [owner pickedPlaylist:title]; });
+}
+
+- (void)pickedPlaylist:(NSString *)title {
+    if (!title) {
+        UIAlertView *create = [[[UIAlertView alloc] initWithTitle:RewindL(@"new_playlist")
+                                                           message:nil delegate:self
+                                                 cancelButtonTitle:RewindL(@"cancel")
+                                                 otherButtonTitles:RewindL(@"create"), nil] autorelease];
+        create.alertViewStyle = UIAlertViewStylePlainTextInput;
+        create.tag = RewindArtistAlertCreatePlaylist;
+        [create show];
+        return;
+    }
+    RewindAddTrackToPickedPlaylist(_menuTrack, title, ^(NSError *error) {
+        RewindShowToast(self.view, error ? RewindFriendlyError(error) : RewindL(@"added_to_playlist"), RW(24.0f));
+    });
 }
 
 - (void)alertView:(UIAlertView *)alert clickedButtonAtIndex:(NSInteger)index {
     if (index == alert.cancelButtonIndex) return;
-    if (alert.tag == RewindArtistAlertPlaylist) {
-        if (index == 1) {
-            UIAlertView *create = [[[UIAlertView alloc] initWithTitle:RewindL(@"new_playlist")
-                                                               message:nil delegate:self
-                                                     cancelButtonTitle:RewindL(@"cancel")
-                                                     otherButtonTitles:RewindL(@"create"), nil] autorelease];
-            create.alertViewStyle = UIAlertViewStylePlainTextInput;
-            create.tag = RewindArtistAlertCreatePlaylist;
-            [create show];
-        } else {
-            RewindAddTrackToPickedPlaylist(_menuTrack, [alert buttonTitleAtIndex:index], ^(NSError *error) {
-                RewindShowToast(self.view, error ? RewindFriendlyError(error) : RewindL(@"added_to_playlist"), RW(24.0f));
-            });
-        }
-    } else if (alert.tag == RewindArtistAlertCreatePlaylist) {
+    if (alert.tag == RewindArtistAlertCreatePlaylist) {
         NSString *name = [[[alert textFieldAtIndex:0] text]
                           stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (!name.length) return;

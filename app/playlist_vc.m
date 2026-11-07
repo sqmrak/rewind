@@ -231,6 +231,23 @@ NSArray *RewindPlaylistPickerTitles(void) {
     return titles;
 }
 
+void RewindShowPlaylistPicker(UIView *host, RewindTrack *track, void (^picked)(NSString *title)) {
+    if (!host || !track || !picked) return;
+    RewindSheet *sheet = [[[RewindSheet alloc] initWithFrame:host.bounds] autorelease];
+    [sheet setHeaderTitle:RewindL(@"menu_add_playlist") subtitle:track.title accessories:nil];
+    void (^choose)(NSString *) = [[picked copy] autorelease];
+    NSMutableArray *items = [NSMutableArray array];
+    [items addObject:[RewindSheetItem itemWithIcon:@"playlist-add" title:RewindL(@"new_playlist")
+                                             action:^{ choose(nil); }]];
+    for (NSString *title in RewindPlaylistPickerTitles()) {
+        NSString *picked_title = [[title copy] autorelease];
+        [items addObject:[RewindSheetItem itemWithIcon:@"playlist-add" title:title
+                                                 action:^{ choose(picked_title); }]];
+    }
+    [sheet setItems:items];
+    [sheet showInView:host];
+}
+
 void RewindAddTrackToPickedPlaylist(RewindTrack *track, NSString *title,
                                     void (^completion)(NSError *error)) {
     for (NSString *name in RewindPlaylistNames()) {
