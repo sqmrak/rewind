@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 STAGE="$ROOT/.ipa-stage"
-OUT="$ROOT/rewind-v1.2.1-stable.ipa"
+OUT="$ROOT/rewind-v1.3.0-stable.ipa"
 
 bash "$ROOT/build_fat.sh"
 rm -rf "$STAGE"

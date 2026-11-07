@@ -1,7 +1,7 @@
 #ifndef REWIND_CONFIG_H
 #define REWIND_CONFIG_H
 
-#define REWIND_VERSION @"v1.2.1-stable"
+#define REWIND_VERSION @"v1.3.0-stable"
 #define REWIND_API_KEY_DEFAULTS_KEY @"RewindAPIKey"
 #define REWIND_AUDIO_SERVER_DEFAULTS_KEY @"RewindAudioServerURL"
 #define REWIND_AUDIO_SERVER_URL @"https://invidious.f5.si"
