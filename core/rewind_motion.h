@@ -17,7 +17,23 @@ typedef enum rewind_motion_curve {
     REWIND_MOTION_POPUP_MODERN_EXIT,
     /* and in the classic theme: the ease out and the ease in of the system of the time, a little quicker and with no overshoot anywhere */
     REWIND_MOTION_POPUP_CLASSIC_ENTER,
-    REWIND_MOTION_POPUP_CLASSIC_EXIT
+    REWIND_MOTION_POPUP_CLASSIC_EXIT,
+    /* the motion tokens of youtube music 9.45: the three emphasized easings (the full one is two bezier pieces, not one) and the standard easing */
+    REWIND_MOTION_M3_EMPHASIZED,
+    REWIND_MOTION_M3_EMPHASIZED_DECELERATE,
+    REWIND_MOTION_M3_EMPHASIZED_ACCELERATE,
+    REWIND_MOTION_M3_STANDARD,
+    /* its spring tokens, solved as a damped spring and cut where the travel is within a thousandth of rest: spatial for things that move or resize, effects for colour and
+       opacity, which never overshoot */
+    REWIND_MOTION_M3_SPATIAL,
+    REWIND_MOTION_M3_SPATIAL_FAST,
+    REWIND_MOTION_M3_SPATIAL_SLOW,
+    REWIND_MOTION_M3_EFFECTS,
+    /* the spatial springs of the Material 3 Expressive scheme: the same stiffness as above with a damping ratio of 0.6, so the thing travels past its target by about a tenth of
+       the way and settles back, which is the bounce of expressive controls */
+    REWIND_MOTION_EXPRESSIVE_SPATIAL,
+    REWIND_MOTION_EXPRESSIVE_SPATIAL_FAST,
+    REWIND_MOTION_EXPRESSIVE_SPATIAL_SLOW
 } rewind_motion_curve;
 
 double rewind_motion_duration(rewind_motion_curve curve);
