@@ -24,7 +24,7 @@
 	<key>CFBundleSignature</key>
 	<string>RWND</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.0-stable</string>
+	<string>1.2.0-stable</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -37,7 +37,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1100</string>
+	<string>1200</string>
 	<!-- the iphone and ipad lists are separate: ios 5 and 6 pick the listed file closest to the wanted size, and an
 	     iphone 4s took the square ipad file from one shared list -->
 	<key>CFBundleIcons</key>
