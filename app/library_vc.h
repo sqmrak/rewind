@@ -29,6 +29,8 @@ typedef enum {
     NSMutableArray *_tracks;
     NSArray *_likedTracks;
     NSUInteger _likesRequest;
+    BOOL _loadingLikes;
+    NSString *_likesFailure;
     UITableView *_table;
     UIView *_listHeader;
     UILabel *_countLabel;

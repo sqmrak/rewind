@@ -27,8 +27,6 @@ static NSString * const RewindTVClientName = @"TVHTML5";
 static NSString * const RewindTVClientVersion = @"7.20250101.00.00";
 static NSString * const RewindAccountErrorDomain = @"com.sqmrak.rewind.account";
 
-/* a liked music list longer than this stops paging instead of looping on a bad token */
-enum { RewindAccountMaxPages = 40 };
 enum { RewindAccountMaxDepth = 48 };
 
 typedef void (^RewindTokenCompletion)(NSString *token, NSError *error);
@@ -886,7 +884,7 @@ static void RewindAccountPagePlaylist(NSString *continuation, NSMutableArray *tr
         return;
     }
     if (page >= maxPages) {
-        completion(tracks, maxPages == 1 ? nil : RewindAccountError(502, @"Playlist exceeds the page limit"));
+        completion(tracks, nil);
         return;
     }
     if (progress && tracks.count) progress([[tracks copy] autorelease], nil);
@@ -909,6 +907,11 @@ static void RewindAccountPagePlaylist(NSString *continuation, NSMutableArray *tr
         }
         [tracks addObjectsFromArray:RewindTracksFromItems([list objectForKey:@"contents"])];
         NSString *next = RewindTVContinuation(list);
+        /* a repeated token would page the same tracks forever now that no page count ends the walk */
+        if ([next isEqualToString:continuation]) {
+            completion(tracks, RewindAccountError(502, @"YouTube repeated a playlist continuation"));
+            return;
+        }
         if (RewindAccountArray([list objectForKey:@"continuations"]).count && !next) {
             completion(tracks, RewindAccountError(502, @"YouTube returned an invalid playlist continuation"));
             return;
@@ -952,12 +955,12 @@ static void RewindAccountLoadPlaylistPages(NSString *playlistID, NSUInteger maxP
 }
 
 void RewindAccountLoadPlaylistTracks(NSString *playlistID, RewindAccountListCompletion completion) {
-    RewindAccountLoadPlaylistPages(playlistID, RewindAccountMaxPages, nil, completion);
+    RewindAccountLoadPlaylistPages(playlistID, NSUIntegerMax, nil, completion);
 }
 
 void RewindAccountLoadPlaylistTracksProgressive(NSString *playlistID, RewindAccountListCompletion progress,
                                                 RewindAccountListCompletion completion) {
-    RewindAccountLoadPlaylistPages(playlistID, RewindAccountMaxPages, progress, completion);
+    RewindAccountLoadPlaylistPages(playlistID, NSUIntegerMax, progress, completion);
 }
 
 /* the tv playlist list holds every youtube playlist; the music app shows only playlists of songs. a playlist counts
@@ -1138,9 +1141,10 @@ void RewindAccountLoadLikes(BOOL force, RewindAccountListCompletion completion) 
     }
     NSUInteger generation = g_account.generation;
     RewindAccountLoadPlaylistTracks(@"LM", ^(NSArray *tracks, NSError *error) {
-        if (!error && generation == g_account.generation) {
+        if (generation == g_account.generation && (!error || tracks.count)) {
             RewindAccountStoreLikedTracks(tracks);
-            g_account.likedLoadedAt = [NSDate timeIntervalSinceReferenceDate];
+            /* a partial list is shown but not cached, so the next visit asks again */
+            if (!error) g_account.likedLoadedAt = [NSDate timeIntervalSinceReferenceDate];
             RewindAccountPost(RewindAccountLibraryDidChangeNotification);
         }
         if (completion) completion(tracks, error);

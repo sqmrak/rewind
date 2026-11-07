@@ -308,6 +308,7 @@ static NSString *RewindLibraryThumbnailURL(RewindTrack *track) {
     [_api release];
     [_tracks release];
     [_likedTracks release];
+    [_likesFailure release];
     [_table release];
     [_listHeader release];
     [_countLabel release];
@@ -456,25 +457,33 @@ static NSString *RewindLibraryThumbnailURL(RewindTrack *track) {
 }
 
 - (void)loadLikedMusic {
+    [_likesFailure release];
+    _likesFailure = nil;
     if (!RewindAccountIsSignedIn()) {
         ++_likesRequest;
+        _loadingLikes = NO;
         [_likedTracks release];
         _likedTracks = nil;
         [self reloadLibrary];
         return;
     }
     NSUInteger request = ++_likesRequest;
+    _loadingLikes = YES;
+    [self reloadLibrary];
     [self retain];
     RewindAccountLoadLikes(NO, ^(NSArray *tracks, NSError *error) {
         if (request == _likesRequest) {
-            if (error) {
-                NSLog(@"rewind: liked music load failed: %@", error);
-                if (!_tracks.count) _emptyDescription.text = RewindFriendlyError(error);
-            } else {
+            _loadingLikes = NO;
+            if (error) NSLog(@"rewind: liked music load failed: %@", error);
+            /* a failed late page still leaves the earlier pages worth showing */
+            if (tracks.count || !error) {
                 [_likedTracks release];
                 _likedTracks = [tracks copy];
-                [self reloadLibrary];
             }
+            if (error) _likesFailure = [RewindFriendlyError(error) copy];
+            [self reloadLibrary];
+            if (error && _tracks.count && self.isViewLoaded)
+                RewindShowToast(self.view, RewindFriendlyError(error), RW(28.0f));
         }
         [self release];
     });
@@ -527,10 +536,15 @@ static NSString *RewindLibraryThumbnailURL(RewindTrack *track) {
                                    empty ? 0.0f : RW(72.0f));
     _table.tableHeaderView = _listHeader;
     _countLabel.text = [NSString stringWithFormat:RewindL(@"tracks_count"), (unsigned long)_tracks.count];
+    BOOL likesMode = _mode == RewindLibraryModeAll || _mode == RewindLibraryModeLiked;
+    BOOL loading = empty && likesMode && _loadingLikes;
+    BOOL failed = empty && likesMode && _likesFailure.length;
+    _emptyLabel.text = RewindL(loading ? @"loading_tracks" : failed ? @"load_failed" : @"nothing_here");
+    _emptyDescription.text = failed ? _likesFailure : loading ? @"" : RewindL(@"library_empty_desc");
     _emptyLabel.hidden = !empty;
     _emptyIcon.hidden = !empty;
     _emptyDescription.hidden = !empty;
-    _findButton.hidden = !empty;
+    _findButton.hidden = !empty || loading || failed;
     [_table reloadData];
 }
 

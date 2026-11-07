@@ -78,6 +78,13 @@ static NSString * const RewindAndroidMusicClientVersion = @"7.27.52";
 /* keep a fallback so a fresh install can search before settings is opened */
 NSString * const RewindDefaultAPIKey = @"AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 
+/* browse answers HTTP 200 with no track list for a private, deleted or region-locked playlist, and for a mix id */
+enum { RewindErrorPlaylistUnavailable = 27, RewindErrorPlaylistMix = 28 };
+
+/* a page of 100 tracks is about 2 MB of json; a slow vpn link needs far more than the 8 s of a search */
+static const NSTimeInterval RewindPlaylistPageTimeout = 60.0;
+static const NSUInteger RewindMetadataResponseMax = 32 * 1024 * 1024;
+
 static NSError *RewindError(NSInteger code, NSString *message) {
     return [NSError errorWithDomain:RewindErrorDomain
                                 code:code
@@ -119,6 +126,9 @@ NSString *RewindFriendlyError(NSError *error) {
         if (error.code == 24) return RewindL(@"err_audio_denied");
         if (error.code == 22) return RewindL(@"err_youtube_verify");
         if (error.code == 23) return RewindL(@"err_youtube_login");
+        if (error.code == RewindErrorPlaylistUnavailable) return RewindL(@"err_playlist_unavailable");
+        if (error.code == RewindErrorPlaylistMix) return RewindL(@"err_playlist_mix");
+        if (error.code == 3 || error.code == 14) return RewindL(@"err_bad_response");
         return (error.code == 7 || error.code == 8) ? RewindL(@"err_unavailable") : RewindL(@"err_generic");
     }
     NSString *message = error.localizedDescription;
@@ -1024,7 +1034,7 @@ static void RewindSendRequestBeforeDate(NSURLRequest *request, NSURLRequest *fal
             error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil];
         } else {
             [bounded setTimeoutInterval:remaining];
-            data = RewindHTTPFetchCancellable(bounded, 4 * 1024 * 1024, &response, &error,
+            data = RewindHTTPFetchCancellable(bounded, RewindMetadataResponseMax, &response, &error,
                                               ^{ return audioRequest.cancelled; });
         }
         if (audioRequest.cancelled) {
@@ -1666,40 +1676,58 @@ static NSString *RewindPublicPlaylistContinuation(NSDictionary *shelf, BOOL *inv
     return next;
 }
 
-static void RewindPublicPlaylistPage(NSString *apiKey, NSDictionary *body, NSMutableArray *tracks,
-                                     NSMutableSet *seen, NSUInteger page, RewindSearchCompletion completion) {
+static NSURLRequest *RewindWithTimeout(NSURLRequest *request, NSTimeInterval timeout) {
+    if (!request) return nil;
+    NSMutableURLRequest *copy = [[request mutableCopy] autorelease];
+    [copy setTimeoutInterval:timeout];
+    return copy;
+}
+
+/* a failed later page keeps the tracks already read, so the list stays usable up to there */
+static void RewindPublicPlaylistPage(NSString *apiKey, NSString *playlistID, NSDictionary *body, NSMutableArray *tracks,
+                                     NSMutableSet *seen, RewindSearchCompletion completion) {
     NSError *error = nil;
-    NSURLRequest *request = RewindRequest(@"browse", apiKey, body, &error);
-    NSURLRequest *fallback = RewindRequestForEndpoint(
+    NSURLRequest *request = RewindWithTimeout(RewindRequest(@"browse", apiKey, body, &error), RewindPlaylistPageTimeout);
+    NSURLRequest *fallback = RewindWithTimeout(RewindRequestForEndpoint(
         RewindEndpointFallback, @"https://youtubei.googleapis.com", @"67", RewindClientVersion,
         @"Mozilla/5.0 (iPhone; CPU iPhone OS 6_0 like Mac OS X) AppleWebKit/534.46 Mobile/9A334 Safari/7534.48.3",
-        @"browse", apiKey, body, NULL);
-    if (!request) { completion(nil, error); return; }
+        @"browse", apiKey, body, NULL), RewindPlaylistPageTimeout);
+    if (!request) { completion(tracks.count ? tracks : nil, error); return; }
     RewindSendRequest(request, fallback, ^(id root, NSError *networkError) {
-        if (networkError) { completion(nil, networkError); return; }
+        if (networkError) { completion(tracks.count ? tracks : nil, networkError); return; }
         NSDictionary *shelf = RewindPublicPlaylistShelf(root);
-        if (!shelf) { completion(nil, RewindError(14, @"playlist response has no track list")); return; }
+        if (!shelf) {
+            if (tracks.count) { completion(tracks, RewindError(14, @"playlist continuation has no track list")); return; }
+            completion(nil, [playlistID hasPrefix:@"RD"]
+                       ? RewindError(RewindErrorPlaylistMix, @"mix playlists are not browsable")
+                       : RewindError(RewindErrorPlaylistUnavailable, @"playlist response has no track list"));
+            return;
+        }
         id contents = [shelf objectForKey:@"contents"] ?: [shelf objectForKey:@"continuationItems"];
         if (![contents isKindOfClass:[NSArray class]]) {
-            completion(nil, RewindError(14, @"playlist response has invalid tracks"));
+            completion(tracks.count ? tracks : nil, RewindError(14, @"playlist response has invalid tracks"));
             return;
         }
         RewindCollectTracks(contents, tracks);
         BOOL invalid = NO;
         NSString *next = RewindPublicPlaylistContinuation(shelf, &invalid);
-        if (invalid) { completion(nil, RewindError(14, @"playlist continuation is invalid")); return; }
+        if (invalid) {
+            completion(tracks.count ? tracks : nil, RewindError(14, @"playlist continuation is invalid"));
+            return;
+        }
         if (!next.length) {
             completion(tracks.count ? tracks : nil, tracks.count ? nil : RewindError(14, @"playlist has no playable tracks"));
             return;
         }
-        if (page >= 40 || next.length > 8192 || [seen containsObject:next]) {
-            completion(nil, RewindError(14, @"playlist continuation limit reached"));
+        /* the end of a list is a page without a token; a repeated token would page the same tracks forever */
+        if ([seen containsObject:next]) {
+            completion(tracks, RewindError(14, @"playlist continuation repeats"));
             return;
         }
         [seen addObject:next];
         NSDictionary *nextBody = [NSDictionary dictionaryWithObjectsAndKeys:
                                   RewindClientContext(), @"context", next, @"continuation", nil];
-        RewindPublicPlaylistPage(apiKey, nextBody, tracks, seen, page + 1, completion);
+        RewindPublicPlaylistPage(apiKey, playlistID, nextBody, tracks, seen, completion);
     });
 }
 
@@ -1710,7 +1738,7 @@ static void RewindPublicPlaylistPage(NSString *apiKey, NSDictionary *body, NSMut
         ? playlistID : [@"VL" stringByAppendingString:playlistID];
     NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
                           RewindClientContext(), @"context", browseID, @"browseId", nil];
-    RewindPublicPlaylistPage(_apiKey, body, [NSMutableArray array], [NSMutableSet set], 1, completion);
+    RewindPublicPlaylistPage(_apiKey, playlistID, body, [NSMutableArray array], [NSMutableSet set], completion);
 }
 
 - (void)artistPageForID:(NSString *)artistID completion:(RewindArtistPageCompletion)completion {
