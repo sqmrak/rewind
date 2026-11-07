@@ -78,8 +78,8 @@ static NSString * const RewindAndroidMusicClientVersion = @"7.27.52";
 /* keep a fallback so a fresh install can search before settings is opened */
 NSString * const RewindDefaultAPIKey = @"AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 
-/* browse answers HTTP 200 with no track list for a private, deleted or region-locked playlist, and for a mix id */
-enum { RewindErrorPlaylistUnavailable = 27, RewindErrorPlaylistMix = 28 };
+/* browse answers HTTP 200 with no track list for a private, deleted or region-locked playlist, and for an anonymous one */
+enum { RewindErrorPlaylistUnavailable = 27 };
 
 /* a page of 100 tracks is about 2 MB of json; a slow vpn link needs far more than the 8 s of a search */
 static const NSTimeInterval RewindPlaylistPageTimeout = 60.0;
@@ -127,7 +127,6 @@ NSString *RewindFriendlyError(NSError *error) {
         if (error.code == 22) return RewindL(@"err_youtube_verify");
         if (error.code == 23) return RewindL(@"err_youtube_login");
         if (error.code == RewindErrorPlaylistUnavailable) return RewindL(@"err_playlist_unavailable");
-        if (error.code == RewindErrorPlaylistMix) return RewindL(@"err_playlist_mix");
         if (error.code == 3 || error.code == 14) return RewindL(@"err_bad_response");
         return (error.code == 7 || error.code == 8) ? RewindL(@"err_unavailable") : RewindL(@"err_generic");
     }
@@ -766,6 +765,26 @@ static void RewindCollectTracks(id node, NSMutableArray *tracks) {
     } else if ([node isKindOfClass:[NSArray class]]) {
         for (id value in (NSArray *)node) RewindCollectTracks(value, tracks);
     }
+}
+
+/* the watch panel row of an anonymous list: a flat renderer, not the flex columns of a browse shelf */
+static RewindTrack *RewindTrackFromPanelRenderer(NSDictionary *renderer) {
+    NSString *videoID = RewindString([renderer objectForKey:@"videoId"]);
+    NSString *title = RewindText([renderer objectForKey:@"title"]);
+    if (!rewind_audio_video_id([videoID UTF8String]) || !title.length) return nil;
+    id byline = [renderer objectForKey:@"longBylineText"];
+    NSString *line = RewindText(byline);
+    NSString *artist = RewindArtistNameFromRuns(byline) ?: RewindArtistFromMetadataText(line);
+    NSString *clock = RewindText([renderer objectForKey:@"lengthText"]);
+    return [[[RewindTrack alloc] initWithVideoID:videoID
+                                           title:title
+                                          artist:RewindDisplayArtist(artist ?: @"")
+                                           album:RewindAlbumFromMetadataText(line) ?: @""
+                                    thumbnailURL:RewindThumbnail(renderer)
+                                        duration:clock ? RewindClockSeconds(clock) : 0
+                                      playlistID:nil
+                                        artistID:RewindArtistBrowseID(byline)
+                                      resultType:nil] autorelease];
 }
 
 /* youtube's gl decides which catalogue/region answers search and browse;
@@ -1698,9 +1717,7 @@ static void RewindPublicPlaylistPage(NSString *apiKey, NSString *playlistID, NSD
         NSDictionary *shelf = RewindPublicPlaylistShelf(root);
         if (!shelf) {
             if (tracks.count) { completion(tracks, RewindError(14, @"playlist continuation has no track list")); return; }
-            completion(nil, [playlistID hasPrefix:@"RD"]
-                       ? RewindError(RewindErrorPlaylistMix, @"mix playlists are not browsable")
-                       : RewindError(RewindErrorPlaylistUnavailable, @"playlist response has no track list"));
+            completion(nil, RewindError(RewindErrorPlaylistUnavailable, @"playlist response has no track list"));
             return;
         }
         id contents = [shelf objectForKey:@"contents"] ?: [shelf objectForKey:@"continuationItems"];
@@ -1738,7 +1755,28 @@ static void RewindPublicPlaylistPage(NSString *apiKey, NSString *playlistID, NSD
         ? playlistID : [@"VL" stringByAppendingString:playlistID];
     NSDictionary *body = [NSDictionary dictionaryWithObjectsAndKeys:
                           RewindClientContext(), @"context", browseID, @"browseId", nil];
-    RewindPublicPlaylistPage(_apiKey, playlistID, body, [NSMutableArray array], [NSMutableSet set], completion);
+    NSString *apiKey = [[_apiKey copy] autorelease];
+    RewindPublicPlaylistPage(_apiKey, playlistID, body, [NSMutableArray array], [NSMutableSet set],
+                             ^(NSArray *tracks, NSError *error) {
+        if (!error || tracks.count || error.code != RewindErrorPlaylistUnavailable ||
+            ![error.domain isEqualToString:RewindErrorDomain]) {
+            completion(tracks, error);
+            return;
+        }
+        /* an anonymous list (TL, RD) has no browse page, only the watch panel; the panel is one bounded response */
+        RewindWebCall(@"next", apiKey, [NSDictionary dictionaryWithObjectsAndKeys:
+                                        playlistID, @"playlistId", @YES, @"isAudioOnly", nil],
+                      ^(NSDictionary *root, NSError *panelError) {
+            NSMutableArray *panel = [NSMutableArray array];
+            NSDictionary *renderer = RewindDict(RewindFindValueForKey(root, @"playlistPanelRenderer", 0));
+            for (id item in RewindArray([renderer objectForKey:@"contents"])) {
+                RewindTrack *track = RewindTrackFromPanelRenderer(
+                    RewindDict([RewindDict(item) objectForKey:@"playlistPanelVideoRenderer"]));
+                if (track) [panel addObject:track];
+            }
+            completion(panel.count ? panel : nil, panel.count ? nil : (panelError ?: error));
+        });
+    });
 }
 
 - (void)artistPageForID:(NSString *)artistID completion:(RewindArtistPageCompletion)completion {
