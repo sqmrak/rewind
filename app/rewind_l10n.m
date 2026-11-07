@@ -217,6 +217,10 @@ static NSDictionary *RewindTableForCode(NSString *code) {
               @"Save", @"player_save",
               @"Mix", @"player_mix",
               @"Nothing in the queue", @"queue_empty",
+              @"Playing from", @"queue_playing_from",
+              @"%lu track left", @"queue_left_one",
+              @"%lu tracks left", @"queue_left_few",
+              @"%lu tracks left", @"queue_left_many",
               @"Lyrics are unavailable", @"lyrics_none",
               @"No related tracks", @"related_none",
               nil];
@@ -427,6 +431,10 @@ static NSDictionary *RewindTableForCode(NSString *code) {
               @"Сохранить", @"player_save",
               @"Микс", @"player_mix",
               @"Очередь пуста", @"queue_empty",
+              @"Играет из", @"queue_playing_from",
+              @"Остался %lu трек", @"queue_left_one",
+              @"Осталось %lu трека", @"queue_left_few",
+              @"Осталось %lu треков", @"queue_left_many",
               @"Текст недоступен", @"lyrics_none",
               @"Похожих треков нет", @"related_none",
               nil];

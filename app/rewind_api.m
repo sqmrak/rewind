@@ -226,6 +226,14 @@ static void RewindCollectValuesForKey(id node, NSString *key, NSMutableArray *ou
     }
 }
 
+/* list rows carry the badge in "badges", cards in "subtitleBadges" */
+static BOOL RewindRendererIsExplicit(NSDictionary *renderer) {
+    NSMutableArray *icons = [NSMutableArray array];
+    for (NSString *key in [NSArray arrayWithObjects:@"badges", @"subtitleBadges", nil])
+        RewindCollectValuesForKey([renderer objectForKey:key], @"iconType", icons, 0);
+    return [icons containsObject:@"MUSIC_EXPLICIT_BADGE"];
+}
+
 static NSString *RewindFindTextForKey(id node, NSString *key) {
     if ([node isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dict = (NSDictionary *)node;
@@ -747,7 +755,8 @@ static RewindTrack *RewindTrackFromRenderer(NSDictionary *renderer) {
                                   playlistID:isPlaylist ? playlistID : nil
                                     artistID:artistID
                                  resultType:resultType] autorelease];
-    return texts.count > 1 ? [track trackWithDetail:[texts objectAtIndex:1]] : track;
+    if (texts.count > 1) track = [track trackWithDetail:[texts objectAtIndex:1]];
+    return RewindRendererIsExplicit(renderer) ? [track trackExplicit:YES] : track;
 }
 
 static void RewindCollectTracks(id node, NSMutableArray *tracks) {
@@ -776,7 +785,7 @@ static RewindTrack *RewindTrackFromPanelRenderer(NSDictionary *renderer) {
     NSString *line = RewindText(byline);
     NSString *artist = RewindArtistNameFromRuns(byline) ?: RewindArtistFromMetadataText(line);
     NSString *clock = RewindText([renderer objectForKey:@"lengthText"]);
-    return [[[RewindTrack alloc] initWithVideoID:videoID
+    RewindTrack *track = [[[RewindTrack alloc] initWithVideoID:videoID
                                            title:title
                                           artist:RewindDisplayArtist(artist ?: @"")
                                            album:RewindAlbumFromMetadataText(line) ?: @""
@@ -785,6 +794,7 @@ static RewindTrack *RewindTrackFromPanelRenderer(NSDictionary *renderer) {
                                       playlistID:nil
                                         artistID:RewindArtistBrowseID(byline)
                                       resultType:nil] autorelease];
+    return RewindRendererIsExplicit(renderer) ? [track trackExplicit:YES] : track;
 }
 
 /* youtube's gl decides which catalogue/region answers search and browse;
@@ -1227,7 +1237,8 @@ static RewindTrack *RewindTrackFromTwoRow(NSDictionary *renderer) {
                                                  artistID:nil resultType:@"Playlist"] autorelease];
         }
     }
-    return [track trackWithDetail:subtitle];
+    track = [track trackWithDetail:subtitle];
+    return RewindRendererIsExplicit(renderer) ? [track trackExplicit:YES] : track;
 }
 
 static RewindBrowseLink *RewindLinkFromEndpoint(NSString *title, NSDictionary *endpoint, uint32_t color) {
@@ -1342,6 +1353,7 @@ static NSString *RewindWatchTabBrowseID(NSDictionary *root, NSString *prefix) {
 @synthesize resultType = _resultType;
 @synthesize duration = _duration;
 - (BOOL)isPlaylist { return _playlistID.length > 0; }
+- (BOOL)isExplicit { return _explicit; }
 
 - (id)initWithVideoID:(NSString *)videoID
                 title:(NSString *)title
@@ -1406,6 +1418,17 @@ static NSString *RewindWatchTabBrowseID(NSDictionary *root, NSString *prefix) {
                                                      duration:_duration playlistID:_playlistID
                                                      artistID:_artistID resultType:_resultType] autorelease];
     copy->_detail = [RewindCleanText(detail) copy];
+    copy->_explicit = _explicit;
+    return copy;
+}
+
+- (RewindTrack *)trackExplicit:(BOOL)explicit {
+    RewindTrack *copy = [[[RewindTrack alloc] initWithVideoID:_videoID title:_title artist:_artist
+                                                        album:_album thumbnailURL:_thumbnailURL
+                                                     duration:_duration playlistID:_playlistID
+                                                     artistID:_artistID resultType:_resultType] autorelease];
+    copy->_detail = [_detail copy];
+    copy->_explicit = explicit;
     return copy;
 }
 

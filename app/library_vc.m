@@ -28,6 +28,7 @@ static NSDictionary *RewindDictionaryForTrack(RewindTrack *track) {
             RewindTrackArtistText(track), @"artist",
             track.album ?: @"", @"album",
             track.thumbnailURL ?: @"", @"thumbnail",
+            [NSNumber numberWithBool:track.explicit], @"explicit",
             [NSNumber numberWithUnsignedInteger:track.duration], @"duration", nil];
 }
 
@@ -51,7 +52,7 @@ static NSArray *RewindTracksFromEntries(NSArray *saved) {
                             album:savedAlbum
                             thumbnailURL:[entry objectForKey:@"thumbnail"] ?: @""
                             duration:[[entry objectForKey:@"duration"] unsignedIntegerValue]] autorelease];
-        [tracks addObject:track];
+        [tracks addObject:[[entry objectForKey:@"explicit"] boolValue] ? [track trackExplicit:YES] : track];
     }
     return tracks;
 }

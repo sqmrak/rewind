@@ -16,6 +16,8 @@ extern NSString * const RewindPlayerDidChangeNotification;
     RewindAPI *_api;
     NSMutableArray *_queue;
     NSInteger _queueIndex;
+    NSString *_queueSourceTitle;
+    RewindTrack *_queueSourcePlaylist;
     /* a finger on the record: the track follows it back and forth */
     BOOL _scratching, _scratchWasPlaying, _scratchSeeking;
     CFTimeInterval _scratchSeekTime;
@@ -69,12 +71,19 @@ extern NSString * const RewindPlayerDidChangeNotification;
 @property(nonatomic, readonly) BOOL continuousPlayback;
 @property(nonatomic, readonly) float playbackRate;
 @property(nonatomic, readonly) NSInteger queueIndex;
+/* the playlist or album the queue was made from, nil for a queue built from search, mixes or single tracks */
+@property(nonatomic, readonly) NSString *queueSourceTitle;
+/* the youtube playlist behind the source, nil when the source is a local playlist or there is none */
+@property(nonatomic, readonly) RewindTrack *queueSourcePlaylist;
 @property(nonatomic, readonly, getter=isShuffling) BOOL shuffling;
 /* a held record; a track change drops it while the finger is still down */
 @property(nonatomic, readonly, getter=isScratching) BOOL scratching;
 
 - (void)playTrack:(RewindTrack *)track usingAPI:(RewindAPI *)api;
 - (void)setQueue:(NSArray *)tracks selectedIndex:(NSInteger)index usingAPI:(RewindAPI *)api;
+/* a title with no playlist names a local playlist; both nil leaves the queue without a source */
+- (void)setQueue:(NSArray *)tracks selectedIndex:(NSInteger)index sourceTitle:(NSString *)title
+  sourcePlaylist:(RewindTrack *)playlist usingAPI:(RewindAPI *)api;
 - (void)nextTrack;
 - (void)previousTrack;
 - (void)toggle;

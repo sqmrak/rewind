@@ -279,6 +279,8 @@ static void RewindPlaybackTick(CFRunLoopTimerRef timer, void *context) {
 - (BOOL)continuousPlayback { return _continuousPlayback; }
 - (float)playbackRate { return _playbackRate; }
 - (NSInteger)queueIndex { return _queueIndex; }
+- (NSString *)queueSourceTitle { return _queueSourceTitle; }
+- (RewindTrack *)queueSourcePlaylist { return _queueSourcePlaylist; }
 - (BOOL)isShuffling { return _shuffling; }
 - (BOOL)isScratching { return _scratching; }
 - (id)nativePlayer { return _player; }
@@ -348,6 +350,8 @@ static void RewindPlaybackTick(CFRunLoopTimerRef timer, void *context) {
     [_track release];
     [_api release];
     [_queue release];
+    [_queueSourceTitle release];
+    [_queueSourcePlaylist release];
     [_orderedQueue release];
     [_sleepTimer invalidate];
     [_sleepTimer release];
@@ -822,7 +826,21 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
     });
 }
 
+- (void)replaceQueueSourceTitle:(NSString *)title playlist:(RewindTrack *)playlist {
+    NSString *newTitle = [title copy];
+    RewindTrack *newPlaylist = [playlist retain];
+    [_queueSourceTitle release];
+    [_queueSourcePlaylist release];
+    _queueSourceTitle = newTitle;
+    _queueSourcePlaylist = newPlaylist;
+}
+
 - (void)setQueue:(NSArray *)tracks selectedIndex:(NSInteger)index usingAPI:(RewindAPI *)api {
+    [self setQueue:tracks selectedIndex:index sourceTitle:nil sourcePlaylist:nil usingAPI:api];
+}
+
+- (void)setQueue:(NSArray *)tracks selectedIndex:(NSInteger)index sourceTitle:(NSString *)title
+  sourcePlaylist:(RewindTrack *)playlist usingAPI:(RewindAPI *)api {
     NSMutableArray *newQueue;
     RewindTrack *selectedTrack;
     RewindAPI *selectedAPI;
@@ -841,6 +859,7 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
     [_queue release];
     _queue = newQueue;
     _queueIndex = index;
+    [self replaceQueueSourceTitle:title playlist:playlist];
     if (_shuffling) {
         [_orderedQueue release];
         _orderedQueue = [_queue copy];
@@ -1249,6 +1268,7 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
     [_queue release];
     _queue = nil;
     _queueIndex = 0;
+    [self replaceQueueSourceTitle:nil playlist:nil];
     RewindPlayerNotify(self, nil);
 }
 
@@ -1258,6 +1278,7 @@ static AVURLAsset *RewindAssetForURL(NSURL *audioURL) {
     [_queue release];
     _queue = [currentQueue mutableCopy];
     _queueIndex = 0;
+    [self replaceQueueSourceTitle:nil playlist:nil];
     RewindPlayerNotify(self, nil);
 }
 

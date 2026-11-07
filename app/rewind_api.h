@@ -28,6 +28,7 @@ FOUNDATION_EXPORT NSUInteger RewindClockSeconds(NSString *value);
     NSString *_resultType;
     NSString *_detail;
     NSUInteger _duration;
+    BOOL _explicit;
 }
 
 @property(nonatomic, readonly) NSString *videoID;
@@ -40,6 +41,8 @@ FOUNDATION_EXPORT NSUInteger RewindClockSeconds(NSString *value);
 @property(nonatomic, readonly) NSString *resultType;
 @property(nonatomic, readonly) NSUInteger duration;
 @property(nonatomic, readonly, getter=isPlaylist) BOOL playlist;
+/* youtube flags the song with its explicit badge; lists show an E next to the artist */
+@property(nonatomic, readonly, getter=isExplicit) BOOL explicit;
 /* the second line exactly as youtube words it, nil when the track came from storage */
 @property(nonatomic, readonly) NSString *detail;
 
@@ -59,6 +62,7 @@ FOUNDATION_EXPORT NSUInteger RewindClockSeconds(NSString *value);
             artistID:(NSString *)artistID
          resultType:(NSString *)resultType;
 - (RewindTrack *)trackWithDetail:(NSString *)detail;
+- (RewindTrack *)trackExplicit:(BOOL)explicit;
 
 @end
 

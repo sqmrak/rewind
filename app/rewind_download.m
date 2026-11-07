@@ -105,7 +105,7 @@ NSArray *RewindDownloadedTracks(void) {
             title:[record objectForKey:@"title"] artist:[record objectForKey:@"artist"]
             album:[record objectForKey:@"album"] thumbnailURL:[record objectForKey:@"thumbnailURL"]
             duration:[[record objectForKey:@"duration"] unsignedIntegerValue]] autorelease];
-        [tracks addObject:track];
+        [tracks addObject:[[record objectForKey:@"explicit"] boolValue] ? [track trackExplicit:YES] : track];
         if (tracks.count == 500) break;
     }
     return tracks;
@@ -323,7 +323,8 @@ static BOOL RewindDownloadReserve(NSString *videoID, void (^completion)(NSError 
     }
     NSMutableDictionary *record = [NSMutableDictionary dictionaryWithObjectsAndKeys:
         @1, @"version", _videoID, @"videoID", [NSNumber numberWithLongLong:st.st_size], @"bytes",
-        [NSNumber numberWithUnsignedLongLong:MIN((unsigned long long)_track.duration, (unsigned long long)UINT32_MAX)], @"duration", nil];
+        [NSNumber numberWithUnsignedLongLong:MIN((unsigned long long)_track.duration, (unsigned long long)UINT32_MAX)], @"duration",
+        [NSNumber numberWithBool:_track.explicit], @"explicit", nil];
     NSArray *values = [NSArray arrayWithObjects:_track.title ?: _videoID, _track.artist ?: @"",
                       _track.album ?: @"", _track.thumbnailURL ?: @"", nil];
     NSArray *keys = [NSArray arrayWithObjects:@"title", @"artist", @"album", @"thumbnailURL", nil];

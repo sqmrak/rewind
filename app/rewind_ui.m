@@ -899,6 +899,10 @@ static CGFloat RewindChipTopPadding(void) { return RW(12.0f); }
     _detail.textColor = RewindColorTextSecondary();
     _detail.lineBreakMode = NSLineBreakByTruncatingTail;
     [self addSubview:_detail];
+    _explicit = [[UIImageView alloc] initWithImage:RewindIcon(@"explicit", RW(14.0f), RewindColorTextSecondary())];
+    _explicit.hidden = YES;
+    _explicit.userInteractionEnabled = NO;
+    [self addSubview:_explicit];
     _more = [[RewindIconButton buttonWithIcon:@"more" points:RW(24.0f)] retain];
     [self addSubview:_more];
     return self;
@@ -942,6 +946,7 @@ static CGFloat RewindChipTopPadding(void) { return RW(12.0f); }
     if (!track.detail.length && track.album.length && !track.isPlaylist)
         detail = [NSString stringWithFormat:@"%@ • %@", detail, track.album];
     _detail.text = detail;
+    _explicit.hidden = !track.explicit;
     [_artwork setURL:track.thumbnailURL.length ? track.thumbnailURL
                     : (track.videoID.length ? [NSString stringWithFormat:@"https://i.ytimg.com/vi/%@/mqdefault.jpg",
                                                track.videoID] : nil)];
@@ -971,7 +976,15 @@ static CGFloat RewindChipTopPadding(void) { return RW(12.0f); }
     CGFloat titleH = ceilf(_title.font.lineHeight), detailH = ceilf(_detail.font.lineHeight);
     CGFloat top = floorf((b.size.height - titleH - detailH - RW(2.0f)) * 0.5f);
     _title.frame = CGRectMake(x, top, w, titleH);
-    _detail.frame = CGRectMake(x, top + titleH + RW(2.0f), w, detailH);
+    CGFloat detailX = x, detailW = w;
+    if (!_explicit.hidden) {
+        CGSize badge = _explicit.image.size;
+        _explicit.frame = CGRectMake(x, top + titleH + RW(2.0f) + floorf((detailH - badge.height) * 0.5f),
+                                     badge.width, badge.height);
+        detailX += badge.width + RW(4.0f);
+        detailW = MAX(20.0f, w - badge.width - RW(4.0f));
+    }
+    _detail.frame = CGRectMake(detailX, top + titleH + RW(2.0f), detailW, detailH);
 }
 
 @end

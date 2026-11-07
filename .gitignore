@@ -24,6 +24,7 @@ tests/test_emoji
 tests/test_text_class
 tests/test_device
 tests/test_link
+tests/test_queue
 
 # python caches
 __pycache__/

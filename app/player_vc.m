@@ -5,6 +5,7 @@
 #import <dispatch/dispatch.h>
 #include <math.h>
 #include "rewind_layout.h"
+#include "rewind_queue.h"
 
 #import "rewind_api.h"
 #import "rewind_player.h"
@@ -424,6 +425,8 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
 - (void)updateLyricsTabs;
 - (void)lyricTapped:(UITapGestureRecognizer *)tap;
 - (void)rebuildPanel;
+- (CGFloat)addQueueHeaderAtY:(CGFloat)y width:(CGFloat)width;
+- (void)openQueueSource;
 - (void)performMenuAction:(NSInteger)action;
 - (void)showPlaylistPicker;
 @end
@@ -1280,6 +1283,7 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
         NSInteger current = _player.queueIndex;
         NSArray *queue = _player.queue;
         NSUInteger count = MIN((NSUInteger)100, queue.count);
+        if (queue.count) y = [self addQueueHeaderAtY:y width:width];
         for (NSUInteger index = 0; index < count; ++index) {
             RewindTrack *track = [queue objectAtIndex:index];
             RewindTrackRow *row = [[[RewindTrackRow alloc] initWithFrame:
@@ -1342,6 +1346,48 @@ static UIColor *RewindLyricDimColor(void) { return [UIColor colorWithWhite:1.0f 
     /* the last lyric line must be able to scroll clear of the floating actions */
     _panelScroll.contentSize = CGSizeMake(width, y + (_selectedTab == 1 ? RW(120.0f) : RW(28.0f)));
     [self updatePanelPills];
+}
+
+/* the way back to the playlist the queue came from, and how many tracks are left in it */
+- (CGFloat)addQueueHeaderAtY:(CGFloat)y width:(CGFloat)width {
+    if (_player.queueSourceTitle.length) {
+        RewindSectionHeader *header = [[[RewindSectionHeader alloc] initWithFrame:CGRectMake(0, y, width, 0)] autorelease];
+        [header setTitle:_player.queueSourceTitle caption:RewindL(@"queue_playing_from") avatarURL:nil];
+        __block RewindPlayerVC *owner = self;
+        [header setChevronAction:^{ [owner openQueueSource]; }];
+        CGFloat height = [header preferredHeightForWidth:width];
+        header.frame = CGRectMake(0, y, width, height);
+        [_panelScroll addSubview:header];
+        y += height;
+    }
+    size_t left = rewind_queue_remaining(_player.queue.count, (long)_player.queueIndex);
+    rewind_plural_t form = rewind_plural_form(left, RewindLanguageIsRussian());
+    NSString *key = form == REWIND_PLURAL_ONE ? @"queue_left_one" :
+                    form == REWIND_PLURAL_FEW ? @"queue_left_few" : @"queue_left_many";
+    UILabel *label = [[[RewindTextLabel alloc] initWithFrame:CGRectMake(RW(16.0f), y,
+                                width - RW(32.0f), RW(28.0f))] autorelease];
+    label.backgroundColor = [UIColor clearColor];
+    label.textColor = RewindColorTextSecondary();
+    label.font = RewindFont(14.0f, RewindWeightRegular);
+    label.text = [NSString stringWithFormat:RewindL(key), (unsigned long)left];
+    [_panelScroll addSubview:label];
+    return y + RW(28.0f) + RW(4.0f);
+}
+
+- (void)openQueueSource {
+    NSString *title = _player.queueSourceTitle;
+    RewindTrack *playlist = _player.queueSourcePlaylist;
+    if (!title.length || !_api) return;
+    /* a local playlist deleted while its queue plays has nothing left to open */
+    if (!playlist && ![RewindPlaylistNames() containsObject:title]) {
+        RewindShowToast(self.view, RewindL(@"no_tracks"), RW(24.0f));
+        return;
+    }
+    RewindPlaylistVC *page = playlist
+        ? [[[RewindPlaylistVC alloc] initWithRemotePlaylist:playlist player:_player api:_api] autorelease]
+        : [[[RewindPlaylistVC alloc] initWithName:title player:_player api:_api] autorelease];
+    [self.navigationController setNavigationBarHidden:NO animated:YES];
+    [self.navigationController pushViewController:page animated:YES];
 }
 
 - (void)addPanelStatus:(NSString *)text atY:(CGFloat)y {

@@ -28,6 +28,7 @@ static NSDictionary *RewindPlaylistEntry(RewindTrack *track) {
             RewindTrackArtistText(track), @"artist",
             track.album ?: @"", @"album",
             track.thumbnailURL ?: @"", @"thumbnail",
+            [NSNumber numberWithBool:track.explicit], @"explicit",
             [NSNumber numberWithUnsignedInteger:track.duration], @"duration", nil];
 }
 
@@ -37,13 +38,14 @@ static RewindTrack *RewindTrackFromEntry(NSDictionary *entry) {
     NSString *artist = RewindDisplayArtist([entry objectForKey:@"artist"]);
     if ([artist caseInsensitiveCompare:@"Unknown artist"] == NSOrderedSame)
         artist = @"Various Artists";
-    return [[[RewindTrack alloc] initWithVideoID:videoID
+    RewindTrack *track = [[[RewindTrack alloc] initWithVideoID:videoID
                                         title:[entry objectForKey:@"title"] ?: @"Untitled"
                                        artist:artist
                                         album:[entry objectForKey:@"album"] ?: @""
                                 thumbnailURL:[entry objectForKey:@"thumbnail"] ?: @""
                                      duration:[[entry objectForKey:@"duration"] unsignedIntegerValue]]
             autorelease];
+    return [[entry objectForKey:@"explicit"] boolValue] ? [track trackExplicit:YES] : track;
 }
 
 static NSMutableArray *RewindPlaylistRecords(void) {
@@ -650,7 +652,7 @@ static UILabel *RewindPlaylistStatusLabel(void) {
         RewindShowToast(self.view, RewindL(@"no_tracks"), RewindBottomSafeInset());
         return;
     }
-    [_player setQueue:tracks selectedIndex:0 usingAPI:_api];
+    [_player setQueue:tracks selectedIndex:0 sourceTitle:name sourcePlaylist:nil usingAPI:_api];
     [_player setShuffling:shuffled];
     RewindRecordTrack([tracks objectAtIndex:0]);
 }
@@ -1011,7 +1013,8 @@ static UILabel *RewindPlaylistLabel(CGFloat size, RewindWeight weight, UIColor *
 - (void)playTrackAtIndex:(NSUInteger)index {
     if (index >= _tracks.count || !_player || !_api) return;
     RewindTrack *track = [_tracks objectAtIndex:index];
-    [_player setQueue:_tracks selectedIndex:(NSInteger)index usingAPI:_api];
+    [_player setQueue:_tracks selectedIndex:(NSInteger)index sourceTitle:_playlistName
+       sourcePlaylist:_remotePlaylist usingAPI:_api];
     RewindRecordTrack(track);
 }
 
