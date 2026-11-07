@@ -23,6 +23,7 @@ tests/test_motion
 tests/test_emoji
 tests/test_text_class
 tests/test_device
+tests/test_link
 
 # python caches
 __pycache__/

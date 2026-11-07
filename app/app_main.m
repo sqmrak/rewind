@@ -19,6 +19,7 @@
 #import "rewind_config.h"
 #import "rewind_l10n.h"
 #import "rewind_player.h"
+#import "rewind_openlink.h"
 
 @interface UIViewController (RewindRotation)
 @end
@@ -87,6 +88,17 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(screenSettingChanged:)
                                                  name:REWIND_KEEP_SCREEN_AWAKE_DID_CHANGE_NOTIFICATION object:nil];
     return YES;
+}
+
+/* a link tapped in another app arrives as rewind://www.youtube.com/watch?...; ios 5 to 8 only call this variant */
+- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url
+  sourceApplication:(NSString *)sourceApplication annotation:(id)annotation {
+    (void)application; (void)sourceApplication; (void)annotation;
+    UIViewController *root = _window.rootViewController;
+    UINavigationController *navigation = [root isKindOfClass:[RewindChromeTabsController class]]
+        ? [(RewindChromeTabsController *)root selectedNavigation]
+        : [root isKindOfClass:[UINavigationController class]] ? (UINavigationController *)root : nil;
+    return RewindOpenPlaylistLink([url absoluteString], navigation, RewindAppPlayer, RewindAppAPI);
 }
 
 - (void)updateIdleTimer {

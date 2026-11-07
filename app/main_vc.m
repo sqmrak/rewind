@@ -10,6 +10,7 @@
 #import "player_vc.h"
 #import "rewind_account.h"
 #import "rewind_api.h"
+#import "rewind_openlink.h"
 #import "rewind_config.h"
 #import "rewind_download.h"
 #import "rewind_image_cache.h"
@@ -1373,6 +1374,10 @@ static UIImage *RewindAmbientImage(CGSize size, CGFloat hueA, CGFloat hueB) {
     _searchField.placeholder = RewindL(@"search_placeholder");
     [_searchField addTarget:self action:@selector(searchChanged:) forControlEvents:UIControlEventEditingChanged];
     [fieldBackground addSubview:_searchField];
+    RewindIconButton *paste = [RewindIconButton buttonWithIcon:@"paste" points:RW(22.0f)];
+    paste.tag = 303;
+    [paste setOnTap:^{ [owner searchFromClipboard]; }];
+    [fieldBackground addSubview:paste];
     _searchTable = [[RewindTableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     _searchTable.dataSource = self;
     _searchTable.delegate = self;
@@ -1387,6 +1392,15 @@ static UIImage *RewindAmbientImage(CGSize size, CGFloat hueA, CGFloat hueB) {
     [_searchField becomeFirstResponder];
 }
 
+- (void)searchFromClipboard {
+    NSString *text = RewindClipboardLinkText();
+    if (!text.length) {
+        RewindShowToast(self.view, RewindL(@"clipboard_empty"), 24.0f);
+        return;
+    }
+    [self executeSearch:text];
+}
+
 - (void)layoutSearch {
     if (!_searchPanel || _searchPanel.hidden) return;
     CGFloat w = _searchPanel.bounds.size.width;
@@ -1395,7 +1409,11 @@ static UIImage *RewindAmbientImage(CGSize size, CGFloat hueA, CGFloat hueB) {
     [_searchPanel viewWithTag:301].frame = CGRectMake(0, top, RW(52.0f), RW(56.0f));
     UIView *background = [_searchPanel viewWithTag:302];
     background.frame = CGRectMake(RW(52.0f), top + RW(7.0f), w - RW(68.0f), RW(42.0f));
-    _searchField.frame = CGRectInset(background.bounds, RW(14.0f), 0);
+    CGFloat pasteWidth = RW(42.0f);
+    [background viewWithTag:303].frame = CGRectMake(background.bounds.size.width - pasteWidth, 0, pasteWidth,
+                                                    background.bounds.size.height);
+    _searchField.frame = CGRectMake(RW(14.0f), 0, background.bounds.size.width - RW(14.0f) - pasteWidth,
+                                    background.bounds.size.height);
     _searchHint.frame = CGRectMake(RW(18.0f), h + RW(8.0f), w - RW(36.0f), RW(26.0f));
     _searchTable.frame = CGRectMake(0, CGRectGetMaxY(_searchHint.frame), w,
                                     _searchPanel.bounds.size.height - CGRectGetMaxY(_searchHint.frame));
@@ -1454,6 +1472,7 @@ static UIImage *RewindAmbientImage(CGSize size, CGFloat hueA, CGFloat hueB) {
     if (!query.length) return;
     _searchField.text = query;
     [_searchField resignFirstResponder];
+    if (RewindOpenPlaylistLink(query, self.navigationController, _player, _api)) return;
     NSMutableArray *history = [NSMutableArray array];
     [history addObject:query];
     NSArray *old = [[NSUserDefaults standardUserDefaults] objectForKey:@"RewindSearchHistory"];

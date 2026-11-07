@@ -3,6 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #import "rewind_api.h"
+#import "rewind_openlink.h"
 #import "rewind_player.h"
 #import "rewind_theme.h"
 #import "rewind_l10n.h"
@@ -426,6 +427,10 @@ static UIImage *RewindNativeKeyImage(BOOL pressed) {
         _searchBar.delegate = self;
         _searchBar.placeholder = RewindL(@"search_placeholder");
         RewindChromeStyleSearchBar(_searchBar);
+        /* the bookmark slot of the search bar is the paste button: it reads a link or a query from the clipboard */
+        _searchBar.showsBookmarkButton = YES;
+        [_searchBar setImage:RewindIcon(@"paste", 18.0f, [UIColor colorWithWhite:0.45f alpha:1.0f])
+            forSearchBarIcon:UISearchBarIconBookmark state:UIControlStateNormal];
     }
     return self;
 }
@@ -712,10 +717,21 @@ static UIImage *RewindNativeKeyImage(BOOL pressed) {
     RewindNativeOpen([shelf.items objectAtIndex:(NSUInteger)indexPath.row], shelf, self.navigationController, _context);
 }
 
+- (void)searchBarBookmarkButtonClicked:(UISearchBar *)searchBar {
+    NSString *text = RewindClipboardLinkText();
+    if (!text.length) {
+        RewindShowToast(self.view, RewindL(@"clipboard_empty"), 24.0f);
+        return;
+    }
+    searchBar.text = text;
+    [self searchBarSearchButtonClicked:searchBar];
+}
+
 - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
     [searchBar resignFirstResponder];
     NSString *query = [searchBar.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (!query.length) return;
+    if (RewindOpenPlaylistLink(query, self.navigationController, _context->player, _context->api)) return;
     NSUInteger request = ++_request;
     [_spinner startAnimating];
     [self showStatus:nil];
