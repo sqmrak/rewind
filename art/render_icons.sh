@@ -14,4 +14,13 @@ for svg in "${ROOT}"/art/icons/*.svg; do
     # one 96px master per glyph; the app scales it to the exact point size it draws
     "${RSVG}" -w 96 -h 96 "${TMP}/${name}.svg" -o "${ROOT}/app/icons/ic-${name}.png"
 done
-echo "rendered $(ls "${ROOT}"/art/icons/*.svg | wc -l) icons"
+# the youtube music set keeps its own prefix so it never replaces a glyph above
+count=$(ls "${ROOT}"/art/icons/*.svg | wc -l)
+if [ -d "${ROOT}/art/ytm" ]; then
+    for svg in "${ROOT}"/art/ytm/*.svg; do
+        name="$(basename "${svg}" .svg)"
+        "${RSVG}" -w 96 -h 96 "${svg}" -o "${ROOT}/app/icons/ic-ytm-${name}.png"
+        count=$((count + 1))
+    done
+fi
+echo "rendered ${count} icons"
